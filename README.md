@@ -1,4 +1,4 @@
-# Super-JX-10-V4-Vecoven-Editor
+# Super-JX-10-V4-Vecoven-Editor-Serial
 
 ![Synth](photos/synth.jpg)
 
