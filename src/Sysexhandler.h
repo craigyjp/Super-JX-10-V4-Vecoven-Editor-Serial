@@ -225,6 +225,7 @@ void writeAllPatches() {
 
     // chase_sw (chasePlay)
     rolaRolb_fresh(x[0x1C], t1, t2);
+    midiSplitPoint = t1;   // 0-127 key code, JX-10 split point
     chasePlay = t2;
 
     // bend_range_hi_R
@@ -232,7 +233,6 @@ void writeAllPatches() {
 
     // --- Adapt parameters ---
 
-    // bend_range
     bend_range = bend_range_hi_R ? 0x40 : (bend_range_R >> 1);
     // Convert bend_range to 0-4 steps (2,3,4,7,12 semitones)
     switch (bend_range) {
@@ -261,16 +261,9 @@ void writeAllPatches() {
     }
 
     // chromatic shift: Roland E8..00..18 -> Vecoven 00..30
-    {
-      uint8_t v = A_shift_R;
-      if (v & 0x40) v |= 0x80;
-      upperChromatic = (v + 0x18) & 0xFF;
-    }
-    {
-      uint8_t v = B_shift_R;
-      if (v & 0x40) v |= 0x80;
-      lowerChromatic = (v + 0x18) & 0xFF;
-    }
+
+    upperChromatic = A_shift_R & 0x7F;
+    lowerChromatic = B_shift_R & 0x7F;
 
     // key_assign
     upperAssign = (A_key_assign_R < 7) ? key_assign_conv[A_key_assign_R] : 0;

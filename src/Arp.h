@@ -525,14 +525,12 @@ int16_t arpNextStep() {
               // Play full sequence up, back 2, up to top, repeat
               // Track phase: 0 = going up, 1 = going down, 2 = going up to top
               static uint8_t up4Phase = 0;
-              static int16_t up4PeakPos = 0;
 
               switch (up4Phase) {
                 case 0:  // going up
                   arpPos++;
                   if (arpPos >= arpStepCount) {
                     arpPos = arpStepCount - 1;
-                    up4PeakPos = arpPos;
                     up4Phase = 1;
                     arpInsertCounter = 0;
                   }

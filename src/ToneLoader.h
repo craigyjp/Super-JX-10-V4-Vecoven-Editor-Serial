@@ -83,27 +83,50 @@ Tone toneLibrary[TONE_COUNT];
 // ---------------------------------------------------------------------------
 static inline void decodeEnvMode(uint8_t raw, uint8_t &source, uint8_t &pol) {
   switch (raw) {
-    case 0 ... 31: // ENV2 Inverted to Env3
+    case 0 ... 31: // ENV1 Pos to Env1 pos
       source = 64;
-      pol = -1;
+      pol = 0;
     break;
 
-    case 32 ... 63: // ENV2 Normal to Env3
+    case 32 ... 63: // ENV1 Neg to Env1 neg
       source = 80;
-      pol = -1;
+      pol = 0;
     break;
 
-    case 64 ... 95: // Env1 Inverted to Env2
+    case 64 ... 95: // Env2 Pos to Env3 Pos
+      source = 0;
+      pol = 0;
+    break;
+
+    case 96 ... 127: // Env2 Neg to Env3 Neg
+      source = 16;
+      pol = 0;
+    break;
+
+    default: source = 16; pol = 0; break;  // safe fallback
+
+  }
+}
+
+static inline void decodeDynamics(uint8_t raw, uint8_t &source) {
+  switch (raw) {
+    case 0 ... 31: // Dynamics Off
+      source = 0;
+    break;
+
+    case 32 ... 63: // Dynamics 1
       source = 32;
-      pol = -1;
     break;
 
-    case 96 ... 127: // Env1 Normal to Env2
-      source = 48;
-      pol = -1;
+    case 64 ... 95: // Dynamics 2
+      source = 64;
     break;
 
-    default: source = 96; pol = -1; break;  // safe fallback
+    case 96 ... 127: // Dynamics 3
+      source = 96;
+    break;
+
+    default: source = 96; break;  // safe fallback
 
   }
 }
@@ -112,42 +135,52 @@ static inline void decodeVCAEnvMode(uint8_t raw, uint8_t &source) {
   switch (raw) {
     case 0 ... 63:
       source = 64;
-      // Tone.params[TP_ENV2_ATTACK] = 0;
-      // Tone.params[TP_ENV2_DECAY] = 0;
-      // Tone.params[TP_ENV2_SUSTAIN] = 127;
-      // Tone.params[TP_ENV2_RELEASE] = 0;
+      gatedEnv = true;
       break;
 
-    case 64 ... 127: source = 64; break;
-    default: source = 64; break;  // safe fallback
+    case 64 ... 127: 
+      source = 64; 
+      gatedEnv = false;
+      break;
+
+    default:         source = 64; break;
   }
 }
 
 static inline void decodeDCORange(uint8_t raw, uint8_t &source) {
   switch (raw) {
-    case 0: source = 0; break;
-    case 32: source = 1; break;
-    case 64: source = 2; break;
-    case 96: source = 3; break;
+    case 0 ... 31: source = 0; break;
+    case 32 ... 63: source = 1; break;
+    case 64 ... 95: source = 2; break;
+    case 96 ... 127: source = 3; break;
     default: source = 0; break;  // safe fallback
   }
 }
 
 static inline void decodeLFOWave(uint8_t raw, uint8_t &source) {
   switch (raw) {
-    case 0: source = 0; break;
-    case 32: source = 1; break;
-    case 64: source = 4; break;
+    case 0 ... 31: source = 0; break;
+    case 32 ... 63: source = 1; break;
+    case 64 ... 127: source = 4; break;
+    default: source = 4; break;  // safe fallback
+  }
+}
+
+static inline void decodeChorusType(uint8_t raw, uint8_t &source) {
+  switch (raw) {
+    case 0 ... 31: source = 0; break;
+    case 32 ... 63: source = 32; break;
+    case 64 ... 127: source = 64; break;
     default: source = 0; break;  // safe fallback
   }
 }
 
 static inline void decodeKeyFollow(uint8_t raw, uint8_t &source) {
   switch (raw) {
-    case 0: source = 0; break;
-    case 32: source = 1; break;
-    case 64: source = 2; break;
-    case 96: source = 3; break;
+    case 0 ... 31: source = 0; break;
+    case 32 ... 63: source = 1; break;
+    case 64 ... 95: source = 2; break;
+    case 96 ... 127: source = 3; break;
     default: source = 0; break;  // safe fallback
   }
 }
@@ -294,10 +327,11 @@ void loadToneToSlot(uint8_t toneIndex, bool upper) {
   uint8_t dcoEnvSrc, dcoEnvPol;
   uint8_t mixEnvSrc, mixEnvPol;
   uint8_t vcfEnvSrc, vcfEnvPol;
-  uint8_t vcaEnvSrc;
+  uint8_t vcaEnvSrc, vcfDynamics;
   uint8_t dco1Range, dco1Wave;
   uint8_t dco2Range, dco2Wave;
   uint8_t lfo1Wave, dcoMode, keyFollow1, keyFollow2;
+  uint8_t decodeChorus;
   decodeEnvMode(t.params[TP_DCO_ENV_MODE], dcoEnvSrc, dcoEnvPol);
   decodeEnvMode(t.params[TP_MIXER_ENV_MODE], mixEnvSrc, mixEnvPol);
   decodeEnvMode(t.params[TP_VCF_ENV_MODE], vcfEnvSrc, vcfEnvPol);
@@ -310,6 +344,8 @@ void loadToneToSlot(uint8_t toneIndex, bool upper) {
   decodeDCORange(t.params[TP_DCO2_CROSSMOD], dcoMode);
   decodeKeyFollow(t.params[TP_ENV1_KEY_FOLLOW], keyFollow1);
   decodeKeyFollow(t.params[TP_ENV2_KEY_FOLLOW], keyFollow2);
+  decodeDynamics(t.params[TP_VCF_DYNAMICS], vcfDynamics);
+  decodeChorusType(t.params[TP_CHORUS], decodeChorus);
 
   // --- DCO1 ---
   data[P_dco1_range] = dco1Range;
@@ -376,7 +412,7 @@ void loadToneToSlot(uint8_t toneIndex, bool upper) {
   data[P_vcf_lfo2] = 0;
   data[P_vcf_env] = t.params[TP_VCF_ENV_MOD];
   data[P_vcf_kb] = t.params[TP_VCF_KEY_FOLLOW];
-  data[P_vcf_dyn] = t.params[TP_VCF_DYNAMICS];
+  data[P_vcf_dyn] = vcfDynamics;
   data[P_vcf_env_source] = vcfEnvSrc;
   data[P_vcf_env_pol] = vcfEnvPol;
 
@@ -386,33 +422,40 @@ void loadToneToSlot(uint8_t toneIndex, bool upper) {
   data[P_vca_env_source] = vcaEnvSrc;
 
   // --- Chorus ---
-  data[P_chorus] = t.params[TP_CHORUS];
+  data[P_chorus] = decodeChorus;
 
   // --- Env1 ---
-  data[P_time1] = 0;
-  data[P_level1] = 0;
+  data[P_time1] = t.params[TP_ENV1_ATTACK];
+  data[P_level1] = 127;
   data[P_time2] = 0;
-  data[P_level2] = 0;
-  data[P_time3] = 0;
-  data[P_level3] = 0;
-  data[P_time4] = 0;
+  data[P_level2] = 127;
+  data[P_time3] = t.params[TP_ENV1_DECAY];
+  data[P_level3] = t.params[TP_ENV1_SUSTAIN];
+  data[P_time4] = t.params[TP_ENV1_RELEASE];
   data[P_env5stage_mode] = keyFollow1;
 
   // --- Env2 - zeroed ---
-  data[P_env2_time1] = t.params[TP_ENV1_ATTACK];
+  data[P_env2_time1] = 0;
   data[P_env2_level1] = 0;
   data[P_env2_time2] = 0;
   data[P_env2_level2] = 0;
-  data[P_env2_time3] = t.params[TP_ENV1_DECAY];
-  data[P_env2_level3] = t.params[TP_ENV1_SUSTAIN];
-  data[P_env2_time4] = t.params[TP_ENV1_RELEASE];
+  data[P_env2_time3] = 0;
+  data[P_env2_level3] = 0;
+  data[P_env2_time4] = 0;
   data[P_env2_5stage_mode] = 0;
 
   // --- Env3 (VCA envelope) ---
-  data[P_attack] = t.params[TP_ENV2_ATTACK];
-  data[P_decay] = t.params[TP_ENV2_DECAY];
-  data[P_sustain] = t.params[TP_ENV2_SUSTAIN];
-  data[P_release] = t.params[TP_ENV2_RELEASE];
+  if (gatedEnv) {
+    data[P_attack] = 0;
+    data[P_decay] = 0;
+    data[P_sustain] = 127;
+    data[P_release] = 0;
+  } else {
+    data[P_attack] = t.params[TP_ENV2_ATTACK];
+    data[P_decay] = t.params[TP_ENV2_DECAY];
+    data[P_sustain] = t.params[TP_ENV2_SUSTAIN];
+    data[P_release] = t.params[TP_ENV2_RELEASE];
+  }
   data[P_adsr_mode] = keyFollow2;
 
   // --- Env4 - zeroed ---
@@ -441,12 +484,6 @@ void loadToneToSlot(uint8_t toneIndex, bool upper) {
   Serial.print(F(" "));
   Serial.println(t.name);
 
-Serial.print(F("toneIndex=")); Serial.print(toneIndex);
-Serial.print(F(" upper=")); Serial.print(upper);
-Serial.print(F(" P_attack=")); Serial.print(data[P_attack]);
-Serial.print(F(" P_decay=")); Serial.print(data[P_decay]);
-Serial.print(F(" P_time1=")); Serial.print(data[P_time1]);
-Serial.print(F(" P_time3=")); Serial.println(data[P_time3]);
 }
 
 void loadToneToSlotData(uint8_t toneIndex, bool upper) {
@@ -459,10 +496,11 @@ void loadToneToSlotData(uint8_t toneIndex, bool upper) {
   uint8_t dcoEnvSrc, dcoEnvPol;
   uint8_t mixEnvSrc, mixEnvPol;
   uint8_t vcfEnvSrc, vcfEnvPol;
-  uint8_t vcaEnvSrc;
+  uint8_t vcaEnvSrc, vcfDynamics;
   uint8_t dco1Range, dco1Wave;
   uint8_t dco2Range, dco2Wave;
   uint8_t lfo1Wave, dcoMode, keyFollow1, keyFollow2;
+  uint8_t decodeChorus;
   decodeEnvMode(t.params[TP_DCO_ENV_MODE], dcoEnvSrc, dcoEnvPol);
   decodeEnvMode(t.params[TP_MIXER_ENV_MODE], mixEnvSrc, mixEnvPol);
   decodeEnvMode(t.params[TP_VCF_ENV_MODE], vcfEnvSrc, vcfEnvPol);
@@ -475,6 +513,8 @@ void loadToneToSlotData(uint8_t toneIndex, bool upper) {
   decodeDCORange(t.params[TP_DCO2_CROSSMOD], dcoMode);
   decodeKeyFollow(t.params[TP_ENV1_KEY_FOLLOW], keyFollow1);
   decodeKeyFollow(t.params[TP_ENV2_KEY_FOLLOW], keyFollow2);
+  decodeDynamics(t.params[TP_VCF_DYNAMICS], vcfDynamics);
+  decodeChorusType(t.params[TP_CHORUS], decodeChorus);
 
   // --- DCO1 ---
   data[P_dco1_range] = dco1Range;
@@ -541,7 +581,7 @@ void loadToneToSlotData(uint8_t toneIndex, bool upper) {
   data[P_vcf_lfo2] = 0;
   data[P_vcf_env] = t.params[TP_VCF_ENV_MOD];
   data[P_vcf_kb] = t.params[TP_VCF_KEY_FOLLOW];
-  data[P_vcf_dyn] = t.params[TP_VCF_DYNAMICS];
+  data[P_vcf_dyn] = vcfDynamics;
   data[P_vcf_env_source] = vcfEnvSrc;
   data[P_vcf_env_pol] = vcfEnvPol;
 
@@ -551,33 +591,40 @@ void loadToneToSlotData(uint8_t toneIndex, bool upper) {
   data[P_vca_env_source] = vcaEnvSrc;
 
   // --- Chorus ---
-  data[P_chorus] = t.params[TP_CHORUS];
+  data[P_chorus] = decodeChorus;
 
   // --- Env1 ---
-  data[P_time1] = 0;
-  data[P_level1] = 0;
+  data[P_time1] = t.params[TP_ENV1_ATTACK];
+  data[P_level1] = 127;
   data[P_time2] = 0;
-  data[P_level2] = 0;
-  data[P_time3] = 0;
-  data[P_level3] = 0;
-  data[P_time4] = 0;
+  data[P_level2] = 127;
+  data[P_time3] = t.params[TP_ENV1_DECAY];
+  data[P_level3] = t.params[TP_ENV1_SUSTAIN];
+  data[P_time4] = t.params[TP_ENV1_RELEASE];
   data[P_env5stage_mode] = keyFollow1;
 
   // --- Env2 - zeroed ---
-  data[P_env2_time1] = t.params[TP_ENV1_ATTACK];
+  data[P_env2_time1] = 0;
   data[P_env2_level1] = 0;
   data[P_env2_time2] = 0;
   data[P_env2_level2] = 0;
-  data[P_env2_time3] = t.params[TP_ENV1_DECAY];
-  data[P_env2_level3] = t.params[TP_ENV1_SUSTAIN];
-  data[P_env2_time4] = t.params[TP_ENV1_RELEASE];
+  data[P_env2_time3] = 0;
+  data[P_env2_level3] = 0;
+  data[P_env2_time4] = 0;
   data[P_env2_5stage_mode] = 0;
 
   // --- Env3 (VCA envelope) ---
-  data[P_attack] = t.params[TP_ENV2_ATTACK];
-  data[P_decay] = t.params[TP_ENV2_DECAY];
-  data[P_sustain] = t.params[TP_ENV2_SUSTAIN];
-  data[P_release] = t.params[TP_ENV2_RELEASE];
+  if (gatedEnv) {
+    data[P_attack] = 0;
+    data[P_decay] = 0;
+    data[P_sustain] = 127;
+    data[P_release] = 0;
+  } else {
+    data[P_attack] = t.params[TP_ENV2_ATTACK];
+    data[P_decay] = t.params[TP_ENV2_DECAY];
+    data[P_sustain] = t.params[TP_ENV2_SUSTAIN];
+    data[P_release] = t.params[TP_ENV2_RELEASE];
+  }
   data[P_adsr_mode] = keyFollow2;
 
   // --- Env4 - zeroed ---
@@ -593,12 +640,5 @@ void loadToneToSlotData(uint8_t toneIndex, bool upper) {
   } else {
     lowerToneNumber = toneIndex + 1;
   }
-
-  Serial.print(F("toneIndex=")); Serial.print(toneIndex);
-Serial.print(F(" upper=")); Serial.print(upper);
-Serial.print(F(" P_attack=")); Serial.print(data[P_attack]);
-Serial.print(F(" P_decay=")); Serial.print(data[P_decay]);
-Serial.print(F(" P_time1=")); Serial.print(data[P_time1]);
-Serial.print(F(" P_time3=")); Serial.println(data[P_time3]);
 
 }

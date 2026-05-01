@@ -2,6 +2,34 @@
 byte midiChannel = 1;  //(EEPROM)
 byte midiOutCh = 1; 
 
+enum AssignCat { CAT_POLY = 0, CAT_UNI = 1, CAT_MONO = 2 };
+
+static inline int assignCat(int v)     { return v & 3; }
+static inline int assignVariant(int v) { return (v >> 2) & 1; }
+static inline int assignMake(int cat, int variant) { return (variant << 2) | cat; }
+
+static const char *assignLabels[7] = {
+  "POLY 1", "UNI 1", "MONO 1", "",    // 0, 1, 2, 3-unused
+  "POLY 2", "UNI 2", "MONO 2"         // 4, 5, 6
+};
+
+bool patchNameEditMode = false;
+int  patchNameCursor   = 0;
+char patchNameBuffer[19];   // 18 chars + null
+
+static const char patchSpecialChars[8] = {
+  '-', '*', '/', '\x03', '<', '>', ',', ' '
+};
+
+enum {
+  NAMING_DIGIT = 0,
+  NAMING_SPECIAL,
+  NAMING_CURSOR_LEFT,
+  NAMING_CURSOR_RIGHT,
+  NAMING_ENCODER_UP,
+  NAMING_ENCODER_DOWN,
+};
+
 struct VoiceAndNote {
   int note;
   int velocity;
@@ -101,7 +129,7 @@ int old_value = 0;
 int old_param_offset = 0;
 int displayMode = 0;
 int editMode = 0;
-int assignMode = 0;
+bool switchLEDS = false;;
 
 bool manualSyncInProgress = false;
 bool suppressParamAnnounce = true;
@@ -125,7 +153,10 @@ bool bankSelectMode    = false;   // true while waiting for A-H bank choice
 bool saveToBankMode    = false;   // true when bank-select is for save destination
 int  saveTargetBank    = 0;
 int  saveTargetGroup   = 0;
-int  saveTargetSlot    = 0;
+int  saveTargetSlot    = 1;
+
+
+bool saveBankPicking  = false;  // true = in "choose different bank" sub-flow
 
 unsigned long bankBlinkTimer = 0;
 bool bankBlinkState = false;
@@ -281,8 +312,8 @@ int upperChromatic;
 int lowerChromatic;
 int upperAssign;
 int lowerAssign;
-int upperUnisonDetune;
-int lowerUnisonDetune;
+int upperUnisonDetune = 0x2C;
+int lowerUnisonDetune = 0x2C;
 int upperHold;
 int lowerHold;
 int upperLFOModDepth;
@@ -294,70 +325,34 @@ int lowerbend_enable_SW;
 int at_vib_sw = 0;
 int at_bri_sw = 0;
 int at_vol_sw = 0;
+int midiSplitPoint = 60;
 
-int lfo1_wave_str;
-int lfo1_rate_str;
-int lfo1_delay_str;
-int lfo1_lfo2_str;
-int lfo2_wave_str;
-int lfo2_rate_str;
-int lfo2_delay_str;
-int lfo2_lfo1_str;
-int dco1_PW_str;
-int dco1_PWM_env_str;
-int dco1_PWM_lfo_str;
-int dco1_pitch_env_str;
-int dco1_pitch_lfo_str;
-int dco1_wave_str;
-int dco1_range_str;
-int dco1_tune_str;
-int dco1_mode_str;
-int dco2_PW_str;
-int dco2_PWM_env_str;
-int dco2_PWM_lfo_str;
-int dco2_pitch_env_str;
-int dco2_pitch_lfo_str;
-int dco2_wave_str;
-int dco2_range_str;
-int dco2_tune_str;
-int dco2_fine_str;
-int dco1_level_str;
-int dco2_level_str;
-int dco2_mod_str;
-int vcf_hpf_str;
-int vcf_cutoff_str;
-int vcf_res_str;
-int vcf_kb_str;
-int vcf_env_str;
-int vcf_lfo1_str;
-int vcf_lfo2_str;
-int vca_mod_str;
-int level1_str;
-int time1_str;
-int time2_str;
-int level2_str;
-int time3_str;
-int level3_str;
-int time4_str;
-int env5stage_mode_str;
-int env2_time1_str;
-int env2_level1_str;
-int env2_time2_str;
-int env2_level2_str;
-int env2_time3_str;
-int env2_level3_str;
-int env2_time4_str;
-int env2_5stage_mode_str;
-int attack_str;
-int decay_str;
-int sustain_str;
-int release_str;
-int adsr_mode_str;
-int env4_attack_str;
-int env4_decay_str;
-int env4_sustain_str;
-int env4_release_str;
-int env4_adsr_mode_str;
+// MIDI menu globals — loaded from EEPROM at boot via loadMidiSettings()
+byte upperLocal       = 1;
+byte lowerLocal       = 1;
+byte upperChannel     = 1;
+byte lowerChannel     = 1;
+byte controlChannel   = 1;
+byte patchProgChange  = 3;
+byte sysexExclusive   = 3;
+byte sysexApr         = 3;
+byte realTime         = 1;
+byte upperProgChange  = 3;
+byte upperAfterTouch  = 3;
+byte upperBender      = 3;
+byte upperModulation  = 3;
+byte upperPortamento  = 3;
+byte upperMIDIHold    = 3;
+byte upperVolume      = 3;
+byte lowerProgChange  = 3;
+byte lowerAfterTouch  = 3;
+byte lowerBender      = 3;
+byte lowerModulation  = 3;
+byte lowerPortamento  = 3;
+byte lowerMIDIHold    = 3;
+byte lowerVolume      = 3;
+byte c1c2ToneEdit     = 0;
+
 int unisondetune_str;
 int mod_lfo_str;
 int at_vib_str;
@@ -368,13 +363,17 @@ int portamento_str;
 int volume_str;
 int dualdetune_str;
 int bend_range_str;
+
 bool set10ctave = false;
 bool octave_down_upwards = true;  // true = going up, false = going down
-int octave_up = 0;
+int upperChromaticSW = 0;
+int lowerChromaticSW = 0;
+uint8_t upperByte = 0;
+uint8_t lowerByte = 0;
 int octave_upU = 0;
 int octave_upL = 0;
 bool octave_up_upwards = true;
-
+bool gatedEnv = false;
 
 // Balance variables
 
@@ -387,6 +386,8 @@ static constexpr uint8_t kBoardOffset1Prefix  = 0x0D;
 static constexpr uint8_t kBoardOffset2Prefix  = 0x0E;
 static constexpr uint8_t kBoardOffset3Prefix  = 0x0F;
 static constexpr uint8_t kMaxLevel = 0x69;         // 96
+static constexpr uint8_t kBoardLowerMIDIPrefix = 0x02;
+static constexpr uint8_t kBoardUpperMIDIPrefix = 0x01;
 
 
 // Dual detune
@@ -396,6 +397,7 @@ static constexpr uint8_t kDetuneZeroPos   = 0x2C; // "00"
 static constexpr uint8_t kDetuneNegZero   = 0x2B; // "-00"
 static constexpr uint8_t kDetuneMax       = 0x6B; // "+50"
 constexpr uint8_t TUNE_442HZ = 0x41;  // 442.0 Hz threshold
+
 
 // Pitch bend
 
@@ -439,6 +441,8 @@ int dco2_PWM_dyn = 0;
 int masterTune = 0;
 
 int oldkeyMode = -1;
+bool keyModeUpper = false;
+bool keyModeLower = false;
 int adsr = 0;
 int env5stage = 0;
 bool upperSW = false;
@@ -449,6 +453,8 @@ uint8_t lowerMT1 = 0x2C;
 uint8_t lowerMT2 = 0x2C;
 uint8_t upperMT1 = 0x2C;
 uint8_t upperMT2 = 0x2C;
+uint8_t lowerSend = 0;
+uint8_t lowerVCASend, upperVCASend;
 constexpr uint8_t TUNE_CENTER   = 0x2C;  // A 440 Hz / 0 detune
 constexpr uint8_t TUNE_MIN      = 0x00;
 constexpr uint8_t TUNE_MAX      = 0x7F;
@@ -467,11 +473,8 @@ boolean dual_button;
 boolean split_button;
 boolean single_button;
 boolean special_button;
-boolean poly_button;
-boolean mono_button;
-boolean unison_button;
 
-byte splitPoint = 60;
+
 byte oldsplitPoint = 0;
 byte newsplitPoint = 0;
 byte splitTrans = 0;
@@ -501,26 +504,82 @@ byte midBar2[] = {
   0b00110
 };
 
-byte triUpSolid[] = {
-  0b00100,
-  0b01110,
-  0b11111,
-  0b11111,
-  0b11111,
-  0b00000,
-  0b00000,
-  0b00000
+// TM — dotted top line
+byte frameTopMid[8] = {
+  B00000,
+  B00000,
+  B10101,
+  B00000,
+  B00000,
+  B00000,
+  B00000,
+  B00000
 };
 
-byte triDownSolid[] = {
-  0b00000,
-  0b00000,
-  0b00000,
-  0b11111,
-  0b11111,
-  0b01110,
-  0b00100,
-  0b00000
+byte frameBotMid[8] = {
+  B00000,
+  B00000,
+  B00000,
+  B00000,
+  B10101,
+  B00000,
+  B00000,
+  B00000
+};
+
+byte frameTopLeft[8] = {
+  B00000,     // top row dotted
+  B00000,     // left column dotted
+  B10101,
+  B00000,
+  B10000,
+  B00000,
+  B10000,
+  B00000
+};
+
+byte frameTopRight[8] = {
+  B00000,
+  B00000,
+  B10101,
+  B00000,
+  B00001,
+  B00000,
+  B00001,
+  B00000
+};
+
+byte frameBotLeft[8] = {
+  B10000,
+  B00000,
+  B10000,
+  B00000,
+  B10101,
+  B00000,
+  B00000,
+  B00000      // bottom row dotted
+};
+
+byte frameBotRight[8] = {
+  B00001,
+  B00000,
+  B00001,
+  B00000,
+  B10101,
+  B00000,
+  B00000,
+  B00000
+};
+
+byte backslashGlyph[] = {
+  B00000,
+  B10000,
+  B01000,
+  B00100,
+  B00010,
+  B00001,
+  B00000,
+  B00000
 };
 
 

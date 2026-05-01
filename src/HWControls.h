@@ -369,7 +369,8 @@ Button *mainButtons[] = {
   &patch_1_Button, &patch_2_Button, &patch_3_Button, &patch_4_Button, &patch_5_Button, &patch_6_Button, &patch_7_Button, &patch_8_Button,
   &bank_a_Button, &bank_b_Button, &bank_c_Button, &bank_d_Button, &bank_e_Button, &bank_f_Button, &bank_g_Button, &bank_h_Button,
   &tone_enter_Button, &seq_start_stop_Button, &seq_function_Button, &seq_record_Button,
-  &tone_0_Button, &tone_1_Button, &tone_2_Button, &tone_3_Button, &tone_4_Button, &tone_5_Button, &tone_6_Button, &tone_7_Button, &tone_8_Button, &tone_9_Button
+  &tone_0_Button, &tone_1_Button, &tone_2_Button, &tone_3_Button, &tone_4_Button, &tone_5_Button, &tone_6_Button, &tone_7_Button, &tone_8_Button, &tone_9_Button,
+  &patch_Button, &tone_Button, &midi_Button, &param_Button, &value_Button, &name_Button, &pedal_Button, &c1_Button, &c2_Button 
 };
 
 Button *allButtons[] = {
@@ -383,7 +384,8 @@ Button *allButtons[] = {
   &patch_1_Button, &patch_2_Button, &patch_3_Button, &patch_4_Button, &patch_5_Button, &patch_6_Button, &patch_7_Button, &patch_8_Button,
   &bank_a_Button, &bank_b_Button, &bank_c_Button, &bank_d_Button, &bank_e_Button, &bank_f_Button, &bank_g_Button, &bank_h_Button,
   &tone_enter_Button, &seq_start_stop_Button, &seq_function_Button, &seq_record_Button,
-  &tone_0_Button, &tone_1_Button, &tone_2_Button, &tone_3_Button, &tone_4_Button, &tone_5_Button, &tone_6_Button, &tone_7_Button, &tone_8_Button, &tone_9_Button
+  &tone_0_Button, &tone_1_Button, &tone_2_Button, &tone_3_Button, &tone_4_Button, &tone_5_Button, &tone_6_Button, &tone_7_Button, &tone_8_Button, &tone_9_Button,
+  &patch_Button, &tone_Button, &midi_Button, &param_Button, &value_Button, &name_Button, &pedal_Button, &c1_Button, &c2_Button 
 };
 
 // an array of vectors to hold pointers to the encoders on each MCP

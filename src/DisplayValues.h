@@ -118,3 +118,23 @@ static inline const char *env5stageModeStepToLabel(uint8_t step) {
     default: return "OFF";
   }
 }
+
+static inline uint8_t vcfrangeStepToValue(uint8_t step) {
+  switch (step) {
+    case 0: return 0x00;  // 16
+    case 1: return 0x20;  // 8
+    case 2: return 0x40;  // 4
+    case 3: return 0x60;  // 2
+    default: return 0x00;
+  }
+}
+
+static inline const char *vcfrangeStepToLabel(uint8_t step) {
+  switch (step) {
+    case 0: return "HPF0";
+    case 1: return "HPF1";
+    case 2: return "HPF2";
+    case 3: return "HPF3";
+    default: return "HPF0";
+  }
+}
