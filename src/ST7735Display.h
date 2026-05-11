@@ -449,6 +449,52 @@ void renderArpParameterPage() {
   lcd.print(arpParamValueString(arpParamIndex));
 }
 
+void renderChaseEditPage() {
+  lcd.clear();
+  lcd.noBlink();
+  drawBankSlotHeader();
+
+  // upper section of screen
+
+  lcd.setCursor(5, 0);
+  lcd.print("PATCH  PARAMETER");
+
+  // lower section
+
+  lcd.setCursor(5, 1);
+  lcd.print("SETUP");
+
+  lcd.setCursor(12, 1);
+  const char *optionName;
+  switch (chaseEditField) {
+    case 0:  optionName = "53 CHASE PLAY TIME";  break;
+    case 1:  optionName = "51 CHASE PLAY LEVEL"; break;
+    case 2:  optionName = "52 CHASE PLAY MODE";  break;
+    default: optionName = "";      break;
+  }
+  lcd.print(optionName);
+
+  lcd.setCursor(32, 1);
+  String valueStr;
+  if (chaseEditField == 2) {
+    switch (chaseMode) {
+      case 0:  valueStr = "U-L";    break;
+      case 1:  valueStr = "U-L-L-"; break;
+      case 2:  valueStr = "U-L-U-"; break;
+      default: valueStr = "";       break;
+    }
+  } else {
+    int raw = (chaseEditField == 0) ? chaseTime : chaseLevel;
+    int gui = (raw * 100) / 127;
+    if (gui > 99) gui = 99;
+    valueStr = String(gui);
+  }
+  if (valueStr.length() > 27) valueStr = valueStr.substring(0, 27);
+
+  snprintf(buf, sizeof(buf), "%6s", valueStr.c_str());
+  lcd.print(buf);
+}
+
 void renderSettingsPage() {
   lcd.clear();
 
@@ -585,6 +631,9 @@ void updateScreen() {
     case MIDI_EDIT:
     case MIDI_EDITVALUE:
       renderMIDIEditPage();
+      break;
+    case CHASE_EDIT:
+      renderChaseEditPage();
       break;
   }
   //tft.updateScreen();

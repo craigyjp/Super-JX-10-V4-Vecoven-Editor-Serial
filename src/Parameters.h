@@ -353,6 +353,8 @@ byte lowerMIDIHold    = 3;
 byte lowerVolume      = 3;
 byte c1c2ToneEdit     = 0;
 
+uint8_t chaseEditField = 0;   // 0=Time, 1=Level, 2=Mode
+
 int unisondetune_str;
 int mod_lfo_str;
 int at_vib_str;

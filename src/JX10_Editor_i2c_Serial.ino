@@ -15,6 +15,7 @@
 #include "ToneLoader.h"
 #include "Sysexhandler.h"
 #include "DisplayValues.h"
+#include "ChasePlay.h"
 #include "imxrt.h"
 #include <map>
 
@@ -39,6 +40,7 @@ std::map<int, int> voiceAssignment;
 #define TONE_EDITVALUE 23
 #define MIDI_EDIT 24
 #define MIDI_EDITVALUE 25
+#define CHASE_EDIT 26
 
 unsigned int state = PARAMETER;
 
@@ -211,6 +213,7 @@ void setup() {
   midiOutCh = getMIDIOutCh();
 
   arpInit();
+  chaseInit();
   sendPatchInit();
   loadInitialPatch();
   bootInitInProgress = false;
@@ -2991,7 +2994,6 @@ void sendVCABalance() {
 
   if (km == 0 || km == 3 || km == 4 || km == 5) {
     // Equal-power crossfade approximation
-    // At centre (bal=64) each side gets ~71% not 50%
     uint8_t lowerGain, upperGain;
 
     if (bal <= 64) {
@@ -3004,6 +3006,12 @@ void sendVCABalance() {
 
     uint8_t balancedLower = map_u8(lowerGain, 0, 127, 0, lowerLevel);
     uint8_t balancedUpper = map_u8(upperGain, 0, 127, 0, upperLevel);
+
+    // Chase Play attenuates the Lower side while active
+    if (chasePlay) {
+      balancedLower = (uint8_t)(((uint16_t)balancedLower * (uint16_t)chaseLevel) / 127);
+    }
+
     lowerVCASend = map_u8(balancedLower, 0, 127, 0, kMaxLevel);
     upperVCASend = map_u8(balancedUpper, 0, 127, 0, kMaxLevel);
     sendVoiceParam(kBoardLowerPrefix, NO_OFFSET, kBalanceParam, lowerVCASend);
@@ -4112,6 +4120,7 @@ FLASHMEM void updatechase(bool announce) {
 
 FLASHMEM void updatechaseLevel(bool announce) {
   sendCustomSysEx((controlChannel - 1), 0x2F, chaseLevel);
+  sendVCABalance();
 }
 
 FLASHMEM void updatechaseMode(bool announce) {
@@ -5806,6 +5815,17 @@ byte xfadeUpperVel(byte velocity) {
   return (byte)map(velocity, 49, 127, 2, 127);
 }
 
+// ============================================================================
+// myNoteOn / myNoteOff  (with Chase Play integrated)
+// ----------------------------------------------------------------------------
+// Chase Play is hooked in:
+//   * myNoteOn  : after arp consume, before the keyMode switch
+//   * myNoteOff : after arp consume and hold-latch return, before keyMode switch
+//
+// chasePlayNoteOn / chasePlayNoteOff return true when chase took ownership
+// of the event — in that case we fall through past the normal Dual branch.
+// ============================================================================
+
 void myNoteOn(byte channel, byte note, byte velocity) {
 
   prevNote = note;
@@ -5813,9 +5833,6 @@ void myNoteOn(byte channel, byte note, byte velocity) {
   // Per-patch split zones (JX-10 convention):
   //   note plays the LOWER section if note <= lowerSplitPoint
   //   note plays the UPPER section if note >= upperSplitPoint
-  // This allows a gap (silence between zones) or an overlap (note plays both).
-  // For a "classic" hard split equivalent to the old midiSplitPoint=60 behaviour,
-  // set lowerSplitPoint = 59 and upperSplitPoint = 60.
   bool inLowerZone = (note <= lowerSplitPoint);
   bool inUpperZone = (note >= upperSplitPoint);
 
@@ -5847,7 +5864,6 @@ void myNoteOn(byte channel, byte note, byte velocity) {
   if (arpEnabled || arpLatch) {
     bool captureNote = false;
     if (keyMode == 3) {
-      // ARP plays the lower section, so capture only notes in the lower zone
       if (inLowerZone) captureNote = true;
     } else {
       captureNote = true;
@@ -5867,6 +5883,12 @@ void myNoteOn(byte channel, byte note, byte velocity) {
   }
 
   if (!arpConsumed) {
+
+    // --- CHASE PLAY: intercepts Dual-mode notes when chasePlay is on ---
+    if (chasePlayNoteOn(note, velocity)) {
+      return;
+    }
+
     int voiceNum = -1;
 
     switch (keyMode) {
@@ -5962,7 +5984,6 @@ void myNoteOn(byte channel, byte note, byte velocity) {
         break;
 
       case 3:
-        // SPLIT: route into the lower zone, the upper zone, or both (overlap).
         if (inLowerZone) {
           switch (lowerAssign) {
             case 0:
@@ -6006,8 +6027,6 @@ void myNoteOn(byte channel, byte note, byte velocity) {
         break;
 
       case 4:
-        // T.VOICE: single velocity threshold at upperSplitPoint.
-        // velocity < upperSplitPoint -> lower section, else upper section.
         if (velocity < upperSplitPoint) {
           switch (upperAssign) {
             case 0:
@@ -6119,6 +6138,7 @@ void myNoteOn(byte channel, byte note, byte velocity) {
   }
 }
 
+
 void myNoteOff(byte channel, byte note, byte velocity) {
 
   auto holdEffectiveLower = [&]() -> bool {
@@ -6130,7 +6150,6 @@ void myNoteOff(byte channel, byte note, byte velocity) {
     return (holdManualLower || holdManualUpper || holdPedal);
   };
 
-  // Same dual-zone tests as in myNoteOn — see comment there for semantics.
   bool inLowerZone = (note <= lowerSplitPoint);
   bool inUpperZone = (note >= upperSplitPoint);
 
@@ -6188,6 +6207,11 @@ void myNoteOff(byte channel, byte note, byte velocity) {
       holdLatchedUpper[note] = true;
       return;
     }
+  }
+
+  // --- CHASE PLAY: intercepts Dual-mode releases when chasePlay is on ---
+  if (chasePlayNoteOff(note)) {
+    return;
   }
 
   int assignedVoice = voiceAssignment[note];
@@ -6357,539 +6381,6 @@ void myNoteOff(byte channel, byte note, byte velocity) {
       break;
   }
 }
-
-// void myNoteOn(byte channel, byte note, byte velocity) {
-
-//   prevNote = note;
-
-//   // --- Key down tracking ---
-//   if (keyMode == 3) {
-//     if (note < midiSplitPoint) {
-//       keyDownLower[note] = true;
-//       holdLatchedLower[note] = false;
-//     } else {
-//       keyDownUpper[note] = true;
-//       holdLatchedUpper[note] = false;
-//     }
-//   } else if (keyMode == 0) {
-//     keyDownLower[note] = true;
-//     keyDownUpper[note] = true;
-//     holdLatchedLower[note] = false;
-//     holdLatchedUpper[note] = false;
-//   } else {
-//     keyDownWhole[note] = true;
-//     keyDownLower[note] = true;
-//     keyDownUpper[note] = true;
-//     holdLatchedLower[note] = false;
-//     holdLatchedUpper[note] = false;
-//   }
-
-//   // --- ARP: capture note ---
-//   bool arpConsumed = false;
-//   if (arpEnabled || arpLatch) {
-//     bool captureNote = false;
-//     if (keyMode == 3) {
-//       if (note < midiSplitPoint) captureNote = true;
-//     } else {
-//       captureNote = true;
-//     }
-//     if (captureNote) {
-//       arpAddNote(note);
-//       arpCurrentVel = velocity;
-//       arpBuildStepList();
-//       if (!arpRunning && arpLen > 0) {
-//         arpRunning = true;
-//         arpPos = -1;
-//         arpNextStepUs = micros();
-//         mcp9.digitalWrite(SEQ_START_STOP_LED_RED, HIGH);
-//       }
-//       arpConsumed = true;
-//     }
-//   }
-
-//   if (!arpConsumed) {
-//     int voiceNum = -1;
-
-//     switch (keyMode) {
-
-//       case 0:
-//         {
-//           if (lowerAssign == 1) {
-//             int lowerVoice = getLowerSplitVoicePoly2(note);
-//             int oldNote = voiceToNoteLower[lowerVoice];
-//             if (oldNote >= 0) {
-//               releaseVoice(oldNote, lowerVoice);
-//               voiceAssignmentLower[oldNote] = -1;
-//             }
-//             assignVoice(note, velocity, lowerVoice);
-//             voiceAssignmentLower[note] = lowerVoice;
-//             voiceToNoteLower[lowerVoice] = note;
-//           } else if (lowerAssign == 0) {
-//             int lowerVoice = getLowerSplitVoice(note);
-//             assignVoice(note, velocity, lowerVoice);
-//             voiceAssignmentLower[note] = lowerVoice;
-//             voiceToNoteLower[lowerVoice] = note;
-//           } else if (lowerAssign == 2) {
-//             commandMonoNoteOnLower(note, velocity);
-//           } else if (lowerAssign == 3) {
-//             commandUnisonNoteOnLower(note, velocity);
-//           } else if (lowerAssign == 4) {
-//             assignUnisonPairLower(note, velocity, false);
-//           } else if (lowerAssign == 5) {
-//             assignUnisonPairLower(note, velocity, true);
-//           }
-
-//           if (upperAssign == 1) {
-//             int upperVoice = getUpperSplitVoicePoly2(note);
-//             int oldNote = voiceToNoteUpper[upperVoice - 6];
-//             if (oldNote >= 0) {
-//               releaseVoice(oldNote, upperVoice);
-//               voiceAssignmentUpper[oldNote] = -1;
-//             }
-//             assignVoice(note, velocity, upperVoice);
-//             voiceAssignmentUpper[note] = upperVoice;
-//             voiceToNoteUpper[upperVoice - 6] = note;
-//           } else if (upperAssign == 0) {
-//             int upperVoice = getUpperSplitVoice(note);
-//             assignVoice(note, velocity, upperVoice);
-//             voiceAssignmentUpper[note] = upperVoice;
-//             voiceToNoteUpper[upperVoice - 6] = note;
-//           } else if (upperAssign == 2) {
-//             commandMonoNoteOnUpper(note, velocity);
-//           } else if (upperAssign == 3) {
-//             commandUnisonNoteOnUpper(note, velocity);
-//           } else if (upperAssign == 4) {
-//             assignUnisonPairUpper(note, velocity, false);
-//           } else if (upperAssign == 5) {
-//             assignUnisonPairUpper(note, velocity, true);
-//           }
-//         }
-//         break;
-
-//       case 1:
-//         switch (lowerAssign) {
-//           case 0:
-//             voiceNum = getVoiceNo(-1) - 1;
-//             assignVoice(note, velocity, voiceNum);
-//             break;
-//           case 1:
-//             voiceNum = getVoiceNoPoly2(-1) - 1;
-//             assignVoice(note, velocity, voiceNum);
-//             break;
-//           case 2: commandMonoNoteOn(note, velocity); break;
-//           case 3: commandUnisonNoteOn(note, velocity); break;
-//           case 4: assignWholeUnisonPair(note, velocity, false); break;
-//           case 5: assignWholeUnisonPair(note, velocity, true); break;
-//         }
-//         voiceAssignment[note] = voiceNum;
-//         break;
-
-//       case 2:
-//         switch (upperAssign) {
-//           case 0:
-//             voiceNum = getVoiceNo(-1) - 1;
-//             assignVoice(note, velocity, voiceNum);
-//             break;
-//           case 1:
-//             voiceNum = getVoiceNoPoly2(-1) - 1;
-//             assignVoice(note, velocity, voiceNum);
-//             break;
-//           case 2: commandMonoNoteOn(note, velocity); break;
-//           case 3: commandUnisonNoteOn(note, velocity); break;
-//           case 4: assignWholeUnisonPair(note, velocity, false); break;
-//           case 5: assignWholeUnisonPair(note, velocity, true); break;
-//         }
-//         voiceAssignment[note] = voiceNum;
-//         break;
-
-//       case 3:
-//         if (note < midiSplitPoint) {
-//           switch (lowerAssign) {
-//             case 0:
-//               voiceNum = getLowerSplitVoice(note);
-//               assignVoice(note, velocity, voiceNum);
-//               voiceAssignmentLower[note] = voiceNum;
-//               voiceToNoteLower[voiceNum] = note;
-//               break;
-//             case 1:
-//               voiceNum = getLowerSplitVoicePoly2(note);
-//               assignVoice(note, velocity, voiceNum);
-//               voiceAssignmentLower[note] = voiceNum;
-//               voiceToNoteLower[voiceNum] = note;
-//               break;
-//             case 2: commandMonoNoteOnLower(note, velocity); break;
-//             case 3: commandUnisonNoteOnLower(note, velocity); break;
-//             case 4: assignUnisonPairLower(note, velocity, false); break;
-//             case 5: assignUnisonPairLower(note, velocity, true); break;
-//           }
-//         } else {
-//           switch (upperAssign) {
-//             case 0:
-//               voiceNum = getUpperSplitVoice(note);
-//               assignVoice(note, velocity, voiceNum);
-//               voiceAssignmentUpper[note] = voiceNum;
-//               voiceToNoteUpper[voiceNum - 6] = note;
-//               break;
-//             case 1:
-//               voiceNum = getUpperSplitVoicePoly2(note);
-//               assignVoice(note, velocity, voiceNum);
-//               voiceAssignmentUpper[note] = voiceNum;
-//               voiceToNoteUpper[voiceNum - 6] = note;
-//               break;
-//             case 2: commandMonoNoteOnUpper(note, velocity); break;
-//             case 3: commandUnisonNoteOnUpper(note, velocity); break;
-//             case 4: assignUnisonPairUpper(note, velocity, false); break;
-//             case 5: assignUnisonPairUpper(note, velocity, true); break;
-//           }
-//         }
-//         break;
-
-//       case 4:
-//         if (velocity < midiSplitPoint) {
-//           switch (upperAssign) {
-//             case 0:
-//               voiceNum = getLowerSplitVoice(note);
-//               assignVoice(note, velocity, voiceNum);
-//               voiceAssignmentLower[note] = voiceNum;
-//               voiceToNoteLower[voiceNum] = note;
-//               break;
-//             case 1:
-//               voiceNum = getLowerSplitVoicePoly2(note);
-//               assignVoice(note, velocity, voiceNum);
-//               voiceAssignmentLower[note] = voiceNum;
-//               voiceToNoteLower[voiceNum] = note;
-//               break;
-//             case 2: commandMonoNoteOnLower(note, velocity); break;
-//             case 3: commandUnisonNoteOnLower(note, velocity); break;
-//             case 4: assignUnisonPairLower(note, velocity, false); break;
-//             case 5: assignUnisonPairLower(note, velocity, true); break;
-//           }
-//         } else {
-//           switch (upperAssign) {
-//             case 0:
-//               voiceNum = getUpperSplitVoice(note);
-//               assignVoice(note, velocity, voiceNum);
-//               voiceAssignmentUpper[note] = voiceNum;
-//               voiceToNoteUpper[voiceNum - 6] = note;
-//               break;
-//             case 1:
-//               voiceNum = getUpperSplitVoicePoly2(note);
-//               assignVoice(note, velocity, voiceNum);
-//               voiceAssignmentUpper[note] = voiceNum;
-//               voiceToNoteUpper[voiceNum - 6] = note;
-//               break;
-//             case 2: commandMonoNoteOnUpper(note, velocity); break;
-//             case 3: commandUnisonNoteOnUpper(note, velocity); break;
-//             case 4: assignUnisonPairUpper(note, velocity, false); break;
-//             case 5: assignUnisonPairUpper(note, velocity, true); break;
-//           }
-//         }
-//         voiceAssignment[note] = voiceNum;
-//         break;
-
-//       case 5:
-//         {
-//           byte lowerVel = xfadeLowerVel(velocity);
-//           byte upperVel = xfadeUpperVel(velocity);
-//           if (lowerVel > 0) {
-//             switch (upperAssign) {
-//               case 0:
-//                 {
-//                   int v = getLowerSplitVoice(note);
-//                   assignVoice(note, lowerVel, v);
-//                   voiceAssignmentLower[note] = v;
-//                   voiceToNoteLower[v] = note;
-//                 }
-//                 break;
-//               case 1:
-//                 {
-//                   int v = getLowerSplitVoicePoly2(note);
-//                   int old = voiceToNoteLower[v];
-//                   if (old >= 0) {
-//                     releaseVoice(old, v);
-//                     voiceAssignmentLower[old] = -1;
-//                   }
-//                   assignVoice(note, lowerVel, v);
-//                   voiceAssignmentLower[note] = v;
-//                   voiceToNoteLower[v] = note;
-//                 }
-//                 break;
-//               case 2: commandMonoNoteOnLower(note, lowerVel); break;
-//               case 3: commandUnisonNoteOnLower(note, lowerVel); break;
-//               case 4: assignUnisonPairLower(note, lowerVel, false); break;
-//               case 5: assignUnisonPairLower(note, lowerVel, true); break;
-//             }
-//           }
-//           if (upperVel > 0) {
-//             switch (upperAssign) {
-//               case 0:
-//                 {
-//                   int v = getUpperSplitVoice(note);
-//                   assignVoice(note, upperVel, v);
-//                   voiceAssignmentUpper[note] = v;
-//                   voiceToNoteUpper[v - 6] = note;
-//                 }
-//                 break;
-//               case 1:
-//                 {
-//                   int v = getUpperSplitVoicePoly2(note);
-//                   int old = voiceToNoteUpper[v - 6];
-//                   if (old >= 0) {
-//                     releaseVoice(old, v);
-//                     voiceAssignmentUpper[old] = -1;
-//                   }
-//                   assignVoice(note, upperVel, v);
-//                   voiceAssignmentUpper[note] = v;
-//                   voiceToNoteUpper[v - 6] = note;
-//                 }
-//                 break;
-//               case 2: commandMonoNoteOnUpper(note, upperVel); break;
-//               case 3: commandUnisonNoteOnUpper(note, upperVel); break;
-//               case 4: assignUnisonPairUpper(note, upperVel, false); break;
-//               case 5: assignUnisonPairUpper(note, upperVel, true); break;
-//             }
-//           }
-//         }
-//         voiceAssignment[note] = voiceNum;
-//         break;
-//     }
-//   }
-// }
-
-// void myNoteOff(byte channel, byte note, byte velocity) {
-
-//   auto holdEffectiveLower = [&]() -> bool {
-//     if (keyMode == 3) return (holdManualLower || holdPedal);
-//     return (holdManualLower || holdManualUpper || holdPedal);
-//   };
-//   auto holdEffectiveUpper = [&]() -> bool {
-//     if (keyMode == 3) return (holdManualUpper);
-//     return (holdManualLower || holdManualUpper || holdPedal);
-//   };
-
-//   // Key down tracking
-//   if (keyMode == 3) {
-//     if (note < midiSplitPoint) keyDownLower[note] = false;
-//     else keyDownUpper[note] = false;
-//   } else if (keyMode == 0) {
-//     keyDownLower[note] = false;
-//     keyDownUpper[note] = false;
-//   } else {
-//     keyDownWhole[note] = false;
-//     keyDownLower[note] = false;
-//     keyDownUpper[note] = false;
-//   }
-
-//   // --- ARP: remove note ---
-//   bool arpConsumed = false;
-//   if (arpEnabled || arpLatch) {
-//     bool captureNote = false;
-//     if (keyMode == 3) {
-//       if (note < midiSplitPoint) captureNote = true;
-//     } else {
-//       captureNote = true;
-//     }
-//     if (captureNote) {
-//       arpRemoveNote(note);
-//       arpBuildStepList();
-//       if (!arpLatch && arpLen == 0) {
-//         arpStopCurrentNote();
-//         arpRunning = false;
-//         mcp9.digitalWrite(SEQ_START_STOP_LED_RED, LOW);
-//       }
-//       arpConsumed = true;
-//     }
-//   }
-
-//   if (arpConsumed) return;
-
-//   // Hold latching
-//   if (keyMode == 3) {
-//     if (note < midiSplitPoint) {
-//       if (holdEffectiveLower()) {
-//         holdLatchedLower[note] = true;
-//         return;
-//       }
-//     } else {
-//       if (holdEffectiveUpper()) {
-//         holdLatchedUpper[note] = true;
-//         return;
-//       }
-//     }
-//   } else {
-//     if (holdEffectiveLower()) {
-//       holdLatchedLower[note] = true;
-//       holdLatchedUpper[note] = true;
-//       return;
-//     }
-//   }
-
-//   int assignedVoice = voiceAssignment[note];
-
-//   switch (keyMode) {
-//     case 0:
-//       {
-//         if (lowerAssign == 2) commandMonoNoteOffLower(note);
-//         else if (lowerAssign == 3) commandUnisonNoteOffLower(note);
-//         else if (lowerAssign == 4 || lowerAssign == 5) releaseUnisonPairLower(note);
-//         else {
-//           int lowerVoice = voiceAssignmentLower[note];
-//           if (lowerVoice >= 0 && lowerVoice <= 5 && voiceToNoteLower[lowerVoice] == note) {
-//             releaseVoice(note, lowerVoice);
-//             voiceAssignmentLower[note] = -1;
-//             voiceToNoteLower[lowerVoice] = -1;
-//           }
-//         }
-//         if (upperAssign == 2) commandMonoNoteOffUpper(note);
-//         else if (upperAssign == 3) commandUnisonNoteOffUpper(note);
-//         else if (upperAssign == 4 || upperAssign == 5) releaseUnisonPairUpper(note);
-//         else {
-//           int upperVoice = voiceAssignmentUpper[note];
-//           if (upperVoice >= 6 && upperVoice <= 11 && voiceToNoteUpper[upperVoice - 6] == note) {
-//             releaseVoice(note, upperVoice);
-//             voiceAssignmentUpper[note] = -1;
-//             voiceToNoteUpper[upperVoice - 6] = -1;
-//           }
-//         }
-//       }
-//       break;
-
-//     case 1:
-//       switch (lowerAssign) {
-//         case 0:
-//           assignedVoice = getVoiceNo(note) - 1;
-//           releaseVoice(note, assignedVoice);
-//           break;
-//         case 1:
-//           assignedVoice = getVoiceNoPoly2(note) - 1;
-//           releaseVoice(note, assignedVoice);
-//           break;
-//         case 2: commandMonoNoteOff(note); break;
-//         case 3: commandUnisonNoteOff(note); break;
-//         case 4:
-//         case 5: releaseWholeUnisonPair(note); break;
-//       }
-//       break;
-
-//     case 2:
-//       switch (upperAssign) {
-//         case 0:
-//           assignedVoice = getVoiceNo(note) - 1;
-//           releaseVoice(note, assignedVoice);
-//           break;
-//         case 1:
-//           assignedVoice = getVoiceNoPoly2(note) - 1;
-//           releaseVoice(note, assignedVoice);
-//           break;
-//         case 2: commandMonoNoteOff(note); break;
-//         case 3: commandUnisonNoteOff(note); break;
-//         case 4:
-//         case 5: releaseWholeUnisonPair(note); break;
-//       }
-//       break;
-
-//     case 3:
-//       {
-//         if (note < midiSplitPoint) {
-//           if (lowerAssign == 2) commandMonoNoteOffLower(note);
-//           else if (lowerAssign == 3) commandUnisonNoteOffLower(note);
-//           else if (lowerAssign == 4 || lowerAssign == 5) releaseUnisonPairLower(note);
-//           else {
-//             int lowerVoice = voiceAssignmentLower[note];
-//             if (lowerVoice >= 0 && lowerVoice <= 5 && voiceToNoteLower[lowerVoice] == note) {
-//               releaseVoice(note, lowerVoice);
-//               voiceAssignmentLower[note] = -1;
-//               voiceToNoteLower[lowerVoice] = -1;
-//             }
-//           }
-//         } else {
-//           if (upperAssign == 2) commandMonoNoteOffUpper(note);
-//           else if (upperAssign == 3) commandUnisonNoteOffUpper(note);
-//           else if (upperAssign == 4 || upperAssign == 5) releaseUnisonPairUpper(note);
-//           else {
-//             int upperVoice = voiceAssignmentUpper[note];
-//             if (upperVoice >= 6 && upperVoice <= 11 && voiceToNoteUpper[upperVoice - 6] == note) {
-//               releaseVoice(note, upperVoice);
-//               voiceAssignmentUpper[note] = -1;
-//               voiceToNoteUpper[upperVoice - 6] = -1;
-//             }
-//           }
-//         }
-//       }
-//       break;
-
-//     case 4:
-//       switch (upperAssign) {
-//         case 2:
-//           commandMonoNoteOffLower(note);
-//           commandMonoNoteOffUpper(note);
-//           break;
-//         case 3:
-//           commandUnisonNoteOffLower(note);
-//           commandUnisonNoteOffUpper(note);
-//           break;
-//         case 4:
-//         case 5:
-//           releaseUnisonPairLower(note);
-//           releaseUnisonPairUpper(note);
-//           break;
-//         default:
-//           {
-//             int lowerVoice = voiceAssignmentLower[note];
-//             if (lowerVoice >= 0 && lowerVoice <= 5 && voiceToNoteLower[lowerVoice] == note) {
-//               releaseVoice(note, lowerVoice);
-//               voiceAssignmentLower[note] = -1;
-//               voiceToNoteLower[lowerVoice] = -1;
-//             }
-//             int upperVoice = voiceAssignmentUpper[note];
-//             if (upperVoice >= 6 && upperVoice <= 11 && voiceToNoteUpper[upperVoice - 6] == note) {
-//               releaseVoice(note, upperVoice);
-//               voiceAssignmentUpper[note] = -1;
-//               voiceToNoteUpper[upperVoice - 6] = -1;
-//             }
-//           }
-//           break;
-//       }
-//       break;
-
-//     case 5:
-//       {
-//         switch (upperAssign) {
-//           case 2: commandMonoNoteOffLower(note); break;
-//           case 3: commandUnisonNoteOffLower(note); break;
-//           case 4:
-//           case 5: releaseUnisonPairLower(note); break;
-//           default:
-//             {
-//               int lowerVoice = voiceAssignmentLower[note];
-//               if (lowerVoice >= 0 && lowerVoice <= 5 && voiceToNoteLower[lowerVoice] == note) {
-//                 releaseVoice(note, lowerVoice);
-//                 voiceAssignmentLower[note] = -1;
-//                 voiceToNoteLower[lowerVoice] = -1;
-//               }
-//             }
-//             break;
-//         }
-//         switch (upperAssign) {
-//           case 2: commandMonoNoteOffUpper(note); break;
-//           case 3: commandUnisonNoteOffUpper(note); break;
-//           case 4:
-//           case 5: releaseUnisonPairUpper(note); break;
-//           default:
-//             {
-//               int upperVoice = voiceAssignmentUpper[note];
-//               if (upperVoice >= 6 && upperVoice <= 11 && voiceToNoteUpper[upperVoice - 6] == note) {
-//                 releaseVoice(note, upperVoice);
-//                 voiceAssignmentUpper[note] = -1;
-//                 voiceToNoteUpper[upperVoice - 6] = -1;
-//               }
-//             }
-//             break;
-//         }
-//       }
-//       break;
-//   }
-// }
 
 void commandMonoNoteOn(byte note, byte velocity) {
   notesWhole[note] = true;
@@ -7747,6 +7238,7 @@ void updatePerformanceData() {
   at_vib_safe = at_vib;
   at_bri_safe = at_bri;
   at_vol_safe = at_vol;
+  updatechasePlay(0);
 
   LAST_PARAM = 0x00;
 }
@@ -7899,6 +7391,11 @@ void checkSwitches() {
         break;
 
       case MIDI_EDITVALUE:
+        state = PARAMETER;
+        updateScreen();
+        break;
+
+      case CHASE_EDIT:
         state = PARAMETER;
         updateScreen();
         break;
@@ -8172,6 +7669,20 @@ void checkEncoder() {
                                  arpParamValueString(arpParamIndex));
         updateScreen();
         break;
+
+      case CHASE_EDIT:
+        if (chaseEditField == 0) {
+          if (chaseTime < 127) chaseTime++;
+          updatechaseTime(0);
+        } else if (chaseEditField == 1) {
+          if (chaseLevel < 127) chaseLevel++;
+          updatechaseLevel(0);
+        } else {
+          chaseMode = (chaseMode + 1) % 3;
+          updatechaseMode(0);
+        }
+        updateScreen();
+        break;
     }
     encPrevious = encRead;
 
@@ -8262,6 +7773,20 @@ void checkEncoder() {
         arpDecrementParam(arpParamIndex);
         showCurrentParameterPage(arpParamNames[arpParamIndex],
                                  arpParamValueString(arpParamIndex));
+        updateScreen();
+        break;
+
+      case CHASE_EDIT:
+        if (chaseEditField == 0) {
+          if (chaseTime > 0) chaseTime--;
+          updatechaseTime(0);
+        } else if (chaseEditField == 1) {
+          if (chaseLevel > 0) chaseLevel--;
+          updatechaseLevel(0);
+        } else {
+          chaseMode = (chaseMode + 2) % 3;
+          updatechaseMode(0);
+        }
         updateScreen();
         break;
     }
@@ -8502,15 +8027,25 @@ void mainButtonChanged(Button *btn, bool released) {
       }
       break;
 
-    case CHASE_FUNCTION_BUTTON:
+    case CHASE_TIME_BUTTON:
       if (!released) {
-        chaseMode = !chaseMode;
+        if (state == CHASE_EDIT && chaseEditField == 0) {
+          // Already on Time — exit
+          state = PARAMETER;
+        } else {
+          chaseEditField = 0;
+          state = CHASE_EDIT;
+        }
+        updateScreen();
       }
       break;
 
-    case CHASE_TIME_BUTTON:
+    case CHASE_FUNCTION_BUTTON:
       if (!released) {
-        chaseTime = !chaseTime;
+        // Alternate between Level and Mode, per JX-10 spec
+        chaseEditField = (chaseEditField == 1) ? 2 : 1;
+        state = CHASE_EDIT;
+        updateScreen();
       }
       break;
 
@@ -8564,7 +8099,7 @@ void mainButtonChanged(Button *btn, bool released) {
       }
       break;
 
-  case PATCH_1_BUTTON:
+    case PATCH_1_BUTTON:
       if (!released) {
         if (state == PATCHNAMING) {
           patchNameBuffer[patchNameCursor] = patchSpecialChars[0];  // '-'
@@ -9805,7 +9340,7 @@ void loop() {
 
     arpEngine();
     arpServiceLed();
-
+    chaseService();
     updateToneBlink();
   }
 
