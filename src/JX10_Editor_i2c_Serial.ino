@@ -41,6 +41,9 @@ std::map<int, int> voiceAssignment;
 #define MIDI_EDIT 24
 #define MIDI_EDITVALUE 25
 #define CHASE_EDIT 26
+#define PEDAL_EDIT 27
+#define C1_EDIT 28
+#define C2_EDIT 29
 
 unsigned int state = PARAMETER;
 
@@ -205,6 +208,7 @@ void setup() {
   Serial.println("MIDI In DIN Listening");
 
   loadMidiSettings();
+  loadControlsSettings();
 
   //Read Encoder Direction from EEPROM
   encCW = getEncoderDir();
@@ -328,6 +332,22 @@ void loadMidiSettings() {
   lowerHold = getLowerHold();
   lowerVolume = getLowerVolume();
   c1c2ToneEdit = getC1C2ToneEdit();
+}
+
+void loadControlsSettings() {
+  pedalAssign = getPedalAssign();
+  c1Assign = getC1Assign();
+  c2Assign = getC2Assign();
+
+  // Defensive: EEPROM is 0xFF when uninitialised
+  if (pedalAssign >= PEDAL_ASSIGN_COUNT) pedalAssign = 0;
+  if (c1Assign >= CONTROLLER_ASSIGN_COUNT) c1Assign = 0;
+  if (c2Assign >= CONTROLLER_ASSIGN_COUNT) c2Assign = 0;
+
+  // Mirror into working copies in case anything reads them before menu entry
+  pedalAssignWorking = pedalAssign;
+  c1AssignWorking = c1Assign;
+  c2AssignWorking = c2Assign;
 }
 
 inline uint8_t clampTune(int16_t val) {
@@ -7561,6 +7581,21 @@ void checkSwitches() {
         showMIDIEditPage();
         updateScreen();
         break;
+
+      case PEDAL_EDIT:
+        pedalAssign = pedalAssignWorking;
+        storePedalAssign(pedalAssign);
+        break;
+
+      case C1_EDIT:
+        c1Assign = c1AssignWorking;
+        storeC1Assign(c1Assign);
+        break;
+
+      case C2_EDIT:
+        c2Assign = c2AssignWorking;
+        storeC2Assign(c2Assign);
+        break;
     }
   }
 }
@@ -7759,6 +7794,27 @@ void checkEncoder() {
         }
         updateScreen();
         break;
+
+      case PEDAL_EDIT:
+        pedalAssignWorking = (pedalAssignWorking + 1) % PEDAL_ASSIGN_COUNT;
+        showPedalEditPage("PEDAL SW ASSIGN",
+                             pedalAssignLabels[pedalAssignWorking]);
+        updateScreen();
+        break;
+
+      case C1_EDIT:
+        c1AssignWorking = (c1AssignWorking + 1) % CONTROLLER_ASSIGN_COUNT;
+        showControlsEditPage("C1 PATCH",
+                             controllerAssignLabels[c1AssignWorking]);
+        updateScreen();
+        break;
+
+      case C2_EDIT:
+        c2AssignWorking = (c2AssignWorking + 1) % CONTROLLER_ASSIGN_COUNT;
+        showControlsEditPage("C2 PATCH",
+                             controllerAssignLabels[c2AssignWorking]);
+        updateScreen();
+        break;
     }
     encPrevious = encRead;
 
@@ -7865,6 +7921,33 @@ void checkEncoder() {
         }
         updateScreen();
         break;
+
+      case PEDAL_EDIT:
+        pedalAssignWorking = (pedalAssignWorking == 0)
+                               ? (PEDAL_ASSIGN_COUNT - 1)
+                               : (pedalAssignWorking - 1);
+        showPedalEditPage("PEDAL SW ASSIGN",
+                             pedalAssignLabels[pedalAssignWorking]);
+        updateScreen();
+        break;
+
+      case C1_EDIT:
+        c1AssignWorking = (c1AssignWorking == 0)
+                            ? (CONTROLLER_ASSIGN_COUNT - 1)
+                            : (c1AssignWorking - 1);
+        showControlsEditPage("C1 PATCH",
+                             controllerAssignLabels[c1AssignWorking]);
+        updateScreen();
+        break;
+
+      case C2_EDIT:
+        c2AssignWorking = (c2AssignWorking == 0)
+                            ? (CONTROLLER_ASSIGN_COUNT - 1)
+                            : (c2AssignWorking - 1);
+        showControlsEditPage("C2 PATCH",
+                             controllerAssignLabels[c2AssignWorking]);
+        updateScreen();
+        break;
     }
     encPrevious = encRead;
   }
@@ -7957,21 +8040,62 @@ void mainButtonChanged(Button *btn, bool released) {
 
     case PEDAL_BUTTON:
       if (!released) {
+        if (state == PEDAL_EDIT) {
+          // Re-press exits without committing
+          state = PARAMETER;
+        } else {
+          // Exit any other menu first
+          mcp9.digitalWrite(PATCH_LED_RED, LOW);
+          mcp9.digitalWrite(TONE_LED_RED, LOW);
+          mcp9.digitalWrite(MIDI_LED_RED, LOW);
+          pedalAssignWorking = pedalAssign;  // start preview from stored
+          state = PEDAL_EDIT;
+          showPedalEditPage("PEDAL SW ASSIGN",
+                               pedalAssignLabels[pedalAssignWorking]);
+        }
+        updateScreen();
       }
       break;
 
     case C1_BUTTON:
       if (!released) {
+        if (state == C1_EDIT) {
+          state = PARAMETER;
+        } else {
+          mcp9.digitalWrite(PATCH_LED_RED, LOW);
+          mcp9.digitalWrite(TONE_LED_RED, LOW);
+          mcp9.digitalWrite(MIDI_LED_RED, LOW);
+          c1AssignWorking = c1Assign;
+          state = C1_EDIT;
+          showControlsEditPage("C1 PATCH",
+                               controllerAssignLabels[c1AssignWorking]);
+        }
+        updateScreen();
       }
       break;
 
     case C2_BUTTON:
       if (!released) {
+        if (state == C2_EDIT) {
+          state = PARAMETER;
+        } else {
+          mcp9.digitalWrite(PATCH_LED_RED, LOW);
+          mcp9.digitalWrite(TONE_LED_RED, LOW);
+          mcp9.digitalWrite(MIDI_LED_RED, LOW);
+          c2AssignWorking = c2Assign;
+          state = C2_EDIT;
+          showControlsEditPage("C2 PATCH",
+                               controllerAssignLabels[c2AssignWorking]);
+        }
+        updateScreen();
       }
       break;
 
     case PATCH_BUTTON:
       if (!released) {
+        if (state == PEDAL_EDIT || state == C1_EDIT || state == C2_EDIT) {
+          state = PARAMETER;
+        }
         if (state == PATCH_EDIT || state == PATCH_EDITVALUE) {
           // Already in PATCH menu — exit back to PARAMETER
           state = PARAMETER;
@@ -7993,6 +8117,9 @@ void mainButtonChanged(Button *btn, bool released) {
 
     case TONE_BUTTON:
       if (!released) {
+        if (state == PEDAL_EDIT || state == C1_EDIT || state == C2_EDIT) {
+          state = PARAMETER;
+        }
         if (state == TONE_EDIT || state == TONE_EDITVALUE) {
           state = PARAMETER;
           mcp9.digitalWrite(TONE_LED_RED, LOW);
@@ -8012,6 +8139,9 @@ void mainButtonChanged(Button *btn, bool released) {
 
     case MIDI_BUTTON:
       if (!released) {
+        if (state == PEDAL_EDIT || state == C1_EDIT || state == C2_EDIT) {
+          state = PARAMETER;
+        }
         if (state == MIDI_EDIT || state == MIDI_EDITVALUE) {
           state = PARAMETER;
           mcp9.digitalWrite(MIDI_LED_RED, LOW);

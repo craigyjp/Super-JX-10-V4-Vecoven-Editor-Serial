@@ -105,6 +105,29 @@ bool holdLatchedUpper[128] = {0};
 
 bool sustainPedalDown = false;     // CCsustain >= 64
 
+byte pedalAssign;
+byte c1Assign;
+byte c2Assign;
+
+// Working copies for preview-before-commit
+byte pedalAssignWorking;
+byte c1AssignWorking;
+byte c2AssignWorking;
+
+static const char* pedalAssignLabels[] = {
+  "PATCH SHIFT", "PORTAMENTO", "UP PORTAMENTO", "LO PORTAMENTO",
+  "CHASE PLAY", "HOLD", "UPPER HOLD", "LOWER HOLD", "ARPEG HOLD", "\0"
+};
+
+// C1 and C2 share the same option set
+static const char* controllerAssignLabels[] = {
+  "11 U/L BALANCE", "15 PORTAMENTO TIME", "18 TOTAL VOLUME",
+  "65 UP VOLUME SEND", "66 LO VOLUME SEND", "\0"
+};
+
+static constexpr uint8_t PEDAL_ASSIGN_COUNT      = 9;
+static constexpr uint8_t CONTROLLER_ASSIGN_COUNT = 5;
+
 // Encoders - is it needed?
 
 // adding encoders

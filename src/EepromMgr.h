@@ -31,6 +31,9 @@
 #define EEPROM_LOWER_HOLD           27
 #define EEPROM_LOWER_VOLUME         28
 #define EEPROM_C1_C2_TONE_EDIT      29
+#define EEPROM_PEDAL_ASSIGN         30
+#define EEPROM_C1_ASSIGN            31
+#define EEPROM_C2_ASSIGN            32
 
 // --- Generic helpers for switch (0-1), channel (0-16), sysex (0-3) bytes ---
 // All clamp to safe defaults if EEPROM is uninitialised.
@@ -79,7 +82,13 @@ byte getLowerModulation()    { return readByteOrDefault(EEPROM_LOWER_MODULATION,
 byte getLowerPortamento()    { return readByteOrDefault(EEPROM_LOWER_PORTAMENTO,     0, 3, 3); }
 byte getLowerHold()          { return readByteOrDefault(EEPROM_LOWER_HOLD,           0, 3, 3); }
 byte getLowerVolume()        { return readByteOrDefault(EEPROM_LOWER_VOLUME,         0, 3, 3); }
+byte getPedalAssign()        { return EEPROM.read(EEPROM_PEDAL_ASSIGN); }
+byte getC1Assign()           { return EEPROM.read(EEPROM_C1_ASSIGN); }
+byte getC2Assign()           { return EEPROM.read(EEPROM_C2_ASSIGN); }
 
+void storePedalAssign(byte v)        { EEPROM.update(EEPROM_PEDAL_ASSIGN, v); }
+void storeC1Assign(byte v)           { EEPROM.update(EEPROM_C1_ASSIGN, v); }
+void storeC2Assign(byte v)           { EEPROM.update(EEPROM_C2_ASSIGN, v); }
 void storePatchProgChange(byte v)    { EEPROM.update(EEPROM_PATCH_PROG_CHANGE,    v); }
 void storeSysexExclusive(byte v)     { EEPROM.update(EEPROM_SYSEX_EXCLUSIVE,      v); }
 void storeSysexApr(byte v)           { EEPROM.update(EEPROM_SYSEX_APR,            v); }

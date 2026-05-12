@@ -243,6 +243,38 @@ static void renderPatchFlashPage() {
   lcd.print(buf);
 }
 
+void showPedalEditPage(const char* controllerLabel,
+                          const char* paramLabel) {
+  lcd.clear(); 
+  lcd.setCursor(0, 0);
+  lcd.print("CONTROLS");
+  lcd.setCursor(20, 0);
+  lcd.print("PARAMETER");   
+  lcd.setCursor(0, 1);
+  lcd.print(controllerLabel);  
+  lcd.setCursor(20, 1);
+  lcd.print(paramLabel);  
+  // Left half (cols 0-19): "CONTROLS" on top, controllerName on bottom
+  // Right half (cols 20-39): "PARAMETER" on top, paramLabel on bottom
+  // Using same dotted-frame glyphs as renderPatchFlashPage
+}
+
+void showControlsEditPage(const char* controllerLabel,
+                          const char* paramLabel) {
+  lcd.clear(); 
+  lcd.setCursor(0, 0);
+  lcd.print("CONTROLS");
+  lcd.setCursor(14, 0);
+  lcd.print("PARAMETER");   
+  lcd.setCursor(0, 1);
+  lcd.print(controllerLabel);  
+  lcd.setCursor(14, 1);
+  lcd.print(paramLabel);  
+  // Left half (cols 0-19): "CONTROLS" on top, controllerName on bottom
+  // Right half (cols 20-39): "PARAMETER" on top, paramLabel on bottom
+  // Using same dotted-frame glyphs as renderPatchFlashPage
+}
+
 static void renderEditFlashPage() {
   lcd.clear();
 
