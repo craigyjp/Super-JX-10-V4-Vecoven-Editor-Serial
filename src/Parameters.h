@@ -376,6 +376,10 @@ int octave_upU = 0;
 int octave_upL = 0;
 bool octave_up_upwards = true;
 bool gatedEnv = false;
+int upperRealAssign;
+int lowerRealAssign;
+int upperSavedAssign;
+int lowerSavedAssign;
 
 // Balance variables
 

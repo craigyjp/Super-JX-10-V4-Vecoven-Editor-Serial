@@ -573,7 +573,7 @@ void arpPlayCurrentStep() {
   switch (keyMode) {
     case 0:  // DUAL - both boards
       {
-        switch (upperAssign) {
+        switch (upperRealAssign) {
           case 0:
             {
               int v = getLowerSplitVoice(note);
@@ -613,7 +613,7 @@ void arpPlayCurrentStep() {
     case 1:  // SINGLE LOWER - all 12 voices
     case 2:  // SINGLE UPPER - all 12 voices
       {
-        byte assignData = (keyMode == 1) ? lowerAssign : upperAssign;
+        byte assignData = (keyMode == 1) ? lowerRealAssign : upperRealAssign;
         switch (assignData) {
           case 0: { int v = getVoiceNo(-1) - 1; assignVoice(note, vel, v); } break;
           case 1: { int v = getVoiceNoPoly2(-1) - 1; assignVoice(note, vel, v); } break;
@@ -627,7 +627,7 @@ void arpPlayCurrentStep() {
 
     case 3:  // SPLIT - lower section only
       {
-        switch (lowerAssign) {
+        switch (lowerRealAssign) {
           case 0:
             {
               int v = getLowerSplitVoice(note);
@@ -657,7 +657,7 @@ void arpPlayCurrentStep() {
     case 4:  // T.VOICE
     case 5:  // X-FADE - use lower board for arp
       {
-        switch (upperAssign) {
+        switch (upperRealAssign) {
           case 0:
             {
               int v = getLowerSplitVoice(note);

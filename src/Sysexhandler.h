@@ -269,25 +269,25 @@ void writeAllPatches() {
     upperAssign = (A_key_assign_R < 7) ? key_assign_conv[A_key_assign_R] : 0;
     lowerAssign = (B_key_assign_R < 7) ? key_assign_conv[B_key_assign_R] : 0;
 
-    switch (upperAssign) {
-      case 0: upperAssign = 0; break;
-      case 1: upperAssign = 1; break;
-      case 2: upperAssign = 4; break;
-      case 3: upperAssign = 5; break;
-      case 4: upperAssign = 2; break;
-      case 5: upperAssign = 3; break;
-      default: upperAssign = 0; break;
-    }
+    // switch (upperAssign) {
+    //   case 0: upperAssign = 0; break;
+    //   case 1: upperAssign = 4; break;
+    //   case 2: upperAssign = 2; break;
+    //   case 4: upperAssign = 1; break;
+    //   case 5: upperAssign = 5; break;
+    //   case 6: upperAssign = 3; break;
+    //   default: upperAssign = 0; break;
+    // }
 
-    switch (lowerAssign) {
-      case 0: lowerAssign = 0; break;
-      case 1: lowerAssign = 1; break;
-      case 2: lowerAssign = 4; break;
-      case 3: lowerAssign = 5; break;
-      case 4: lowerAssign = 2; break;
-      case 5: lowerAssign = 3; break;
-      default: lowerAssign = 0; break;
-    }
+    // switch (lowerAssign) {
+    //   case 0: lowerAssign = 0; break;
+    //   case 1: lowerAssign = 4; break;
+    //   case 2: lowerAssign = 2; break;
+    //   case 4: lowerAssign = 1; break;
+    //   case 5: lowerAssign = 5; break;
+    //   case 6: lowerAssign = 3; break;
+    //   default: lowerAssign = 0; break;
+    // }
 
     // --- Load tones ---
     loadToneToSlotData(upperToneNumber - 1, true);

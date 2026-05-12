@@ -442,8 +442,8 @@ void sendVoiceParam(uint8_t prefix, uint8_t offset, uint8_t param, uint8_t value
   // --- Board prefix (running status) ---
   if (prefix != board) {
     Serial3.write(prefix);
-    Serial.print(prefix, HEX);
-    Serial.print(" ");
+    //Serial.print(prefix, HEX);
+    //Serial.print(" ");
     board = prefix;
   }
 
@@ -451,25 +451,25 @@ void sendVoiceParam(uint8_t prefix, uint8_t offset, uint8_t param, uint8_t value
   if (offset != NO_OFFSET) {
     if (offset != EXTRA_OFFSET) {
       Serial3.write(0xFD);
-      Serial.print("FD");
-      Serial.print(" ");
+      //Serial.print("FD");
+      //Serial.print(" ");
       Serial3.write(offset);
       if (offset < 0x10) Serial.print("0");
-      Serial.print(offset, HEX);
-      Serial.print(" ");
+      //Serial.print(offset, HEX);
+      //Serial.print(" ");
       EXTRA_OFFSET = offset;
     }
   }
 
   // --- Parameter + value always sent ---
   Serial3.write(param);
-  if (param < 0x10) Serial.print("0");
-  Serial.print(param, HEX);
-  Serial.print(" ");
+  //if (param < 0x10) Serial.print("0");
+  //Serial.print(param, HEX);
+  //Serial.print(" ");
   Serial3.write(value);
-  if (value < 0x10) Serial.print("0");
-  Serial.print(value, HEX);
-  Serial.println(" ");
+  //if (value < 0x10) Serial.print("0");
+  //Serial.print(value, HEX);
+  //Serial.println(" ");
 }
 
 void sendBoardVoiceParam(uint8_t prefix, uint8_t offset, uint8_t param, uint8_t value) {
@@ -477,8 +477,8 @@ void sendBoardVoiceParam(uint8_t prefix, uint8_t offset, uint8_t param, uint8_t 
   // --- Board prefix (running status) ---
   if (prefix != board) {
     Serial3.write(prefix);
-    Serial.print(prefix, HEX);
-    Serial.print(" ");
+    //Serial.print(prefix, HEX);
+    //Serial.print(" ");
     board = prefix;
   }
 
@@ -486,25 +486,25 @@ void sendBoardVoiceParam(uint8_t prefix, uint8_t offset, uint8_t param, uint8_t 
   if (offset != NO_OFFSET) {
     if (offset != EXTRA_OFFSET) {
       Serial3.write(0xFD);
-      Serial.print("FD");
-      Serial.print(" ");
+      //Serial.print("FD");
+      //Serial.print(" ");
       Serial3.write(offset);
-      if (offset < 0x10) Serial.print("0");
-      Serial.print(offset, HEX);
-      Serial.print(" ");
+      //if (offset < 0x10) Serial.print("0");
+      //Serial.print(offset, HEX);
+      //Serial.print(" ");
       EXTRA_OFFSET = offset;
     }
   }
 
   // --- Parameter + value always sent ---
   Serial3.write(param);
-  if (param < 0x10) Serial.print("0");
-  Serial.print(param, HEX);
-  Serial.print(" ");
+  //if (param < 0x10) Serial.print("0");
+  //Serial.print(param, HEX);
+  //Serial.print(" ");
   Serial3.write(value);
-  if (value < 0x10) Serial.print("0");
-  Serial.print(value, HEX);
-  Serial.println(" ");
+  //if (value < 0x10) Serial.print("0");
+  //Serial.print(value, HEX);
+  //Serial.println(" ");
 }
 
 static inline void send5(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint8_t e) {
@@ -3886,6 +3886,9 @@ FLASHMEM void updatedual_button(bool announce) {
   sendKeyModeEndInit();
   keyModeUpper = false;
   keyModeLower = false;
+  updateAssignLeds();
+  sendAssignSysEx();
+  renderCurrentPatchPage();
 }
 
 FLASHMEM void updatesplit_button(bool announce) {
@@ -3928,6 +3931,9 @@ FLASHMEM void updatesplit_button(bool announce) {
   sendKeyModeEndInit();
   keyModeUpper = false;
   keyModeLower = false;
+  updateAssignLeds();
+  sendAssignSysEx();
+  renderCurrentPatchPage();
 }
 
 FLASHMEM void updatesingle_button(bool announce) {
@@ -3941,30 +3947,40 @@ FLASHMEM void updatesingle_button(bool announce) {
     //startParameterDisplay();
   }
   if (keyMode == 1) {
-    mcp10.digitalWrite(KEY_SINGLE_RED, HIGH);
-    mcp10.digitalWrite(KEY_SINGLE_GREEN, LOW);
-
+    mcp10.digitalWrite(KEY_SINGLE_RED, LOW);
+    mcp10.digitalWrite(KEY_SINGLE_GREEN, HIGH);
+    mcp10.digitalWrite(LOWER_SELECT, LOW);
+    mcp10.digitalWrite(UPPER_SELECT, HIGH);
     Serial3.write(kBoardBothPrefix);
     sendKeyModeStartInit();
     updateUpperToneData();
     keyModeUpper = true;
     keyModeLower = false;
+    upperSW = true;
+    updateAssignLeds();
+    sendAssignSysEx();
+    renderCurrentPatchPage();
   } else {
-    mcp10.digitalWrite(KEY_SINGLE_RED, LOW);
-    mcp10.digitalWrite(KEY_SINGLE_GREEN, HIGH);
+    mcp10.digitalWrite(KEY_SINGLE_RED, HIGH);
+    mcp10.digitalWrite(KEY_SINGLE_GREEN, LOW);
+    mcp10.digitalWrite(LOWER_SELECT, HIGH);
+    mcp10.digitalWrite(UPPER_SELECT, LOW);
     Serial3.write(kBoardBothPrefix);
     sendKeyModeStartInit();
     updateLowerToneData();
     keyModeUpper = false;
     keyModeLower = true;
+    upperSW = false;
+    updateAssignLeds();
+    sendAssignSysEx();
+    renderCurrentPatchPage();
   }
   sendKeyModeEndInit();
   mcp8.digitalWrite(KEY_DUAL_RED, LOW);
   mcp8.digitalWrite(KEY_SPLIT_RED, LOW);
   mcp8.digitalWrite(KEY_SPECIAL_RED, LOW);
   mcp8.digitalWrite(KEY_SPECIAL_GREEN, LOW);
-  mcp10.digitalWrite(LOWER_SELECT, HIGH);
-  mcp10.digitalWrite(UPPER_SELECT, HIGH);
+
   allNotesOff();
   if (keyMode == 1) {
     sendCustomSysEx((controlChannel - 1), 0x18, 0x02);
@@ -4030,6 +4046,9 @@ FLASHMEM void updatespecial_button(bool announce) {
   sendKeyModeEndInit();
   keyModeUpper = false;
   keyModeLower = false;
+  updateAssignLeds();
+  sendAssignSysEx();
+  renderCurrentPatchPage();
 }
 
 // Assigner buttons
@@ -4067,11 +4086,50 @@ FLASHMEM void updateAssignLeds() {
   mcp8.digitalWrite(variant == 0 ? redPin : greenPin, HIGH);
 }
 
+static inline uint8_t wireToInternal(uint8_t w) {
+  switch (w) {
+    case 0: return 0;  // POLY 1
+    case 4: return 1;  // POLY 2
+    case 2: return 2;  // MONO 1
+    case 6: return 3;  // MONO 2
+    case 1: return 4;  // UNISON 1
+    case 5: return 5;  // UNISON 2
+    default: return 0;
+  }
+}
+
+static inline void refreshRealAssigns() {
+  upperRealAssign = wireToInternal((uint8_t)upperAssign);
+  lowerRealAssign = wireToInternal((uint8_t)lowerAssign);
+}
+
 FLASHMEM void sendAssignSysEx() {
   uint8_t addr = upperSW ? 0x1F : 0x28;
   uint8_t val = upperSW ? (uint8_t)upperAssign : (uint8_t)lowerAssign;
+  refreshRealAssigns();  // keep playback-side in sync
+
+  // Serial.print("Pre Upper Assign ");
+  // Serial.println(upperRealAssign);
+  // Serial.print("Pre Lower Assign ");
+  // Serial.println(lowerRealAssign);
+
+  // Serial.print("KEyMODE ");
+  // Serial.println(keyMode);
+
+  if (keyMode == 1) {
+    updateUpperPatchData();
+  }
+  if (keyMode == 2) {
+    updateLowerPatchData();
+  }
+
   uint8_t channelMIDI = upperSW ? (uint8_t)upperChannel : (uint8_t)lowerChannel;
   sendCustomSysEx((channelMIDI - 1), addr, val);
+
+  // Serial.print("Upper Assign ");
+  // Serial.println(upperRealAssign);
+  // Serial.print("Lower Assign ");
+  // Serial.println(lowerRealAssign);
 }
 
 FLASHMEM void announceAssign() {
@@ -4728,21 +4786,24 @@ FLASHMEM void updateeditMode(bool announce) {
     // }
     //startParameterDisplay();
   }
-  switch (editMode) {
-    case 0:
-      upperSW = false;
-      mcp10.digitalWrite(LOWER_SELECT, HIGH);
-      mcp10.digitalWrite(UPPER_SELECT, LOW);
-      break;
-    case 1:
-      upperSW = true;
-      mcp10.digitalWrite(LOWER_SELECT, LOW);
-      mcp10.digitalWrite(UPPER_SELECT, HIGH);
-      break;
-    case 2:
-      mcp10.digitalWrite(LOWER_SELECT, HIGH);
-      mcp10.digitalWrite(UPPER_SELECT, HIGH);
-      break;
+  Serial.println(keyMode);
+  if (keyMode != 1 && keyMode != 2) {
+    switch (editMode) {
+      case 0:
+        upperSW = false;
+        mcp10.digitalWrite(LOWER_SELECT, HIGH);
+        mcp10.digitalWrite(UPPER_SELECT, LOW);
+        break;
+      case 1:
+        upperSW = true;
+        mcp10.digitalWrite(LOWER_SELECT, LOW);
+        mcp10.digitalWrite(UPPER_SELECT, HIGH);
+        break;
+      case 2:
+        mcp10.digitalWrite(LOWER_SELECT, HIGH);
+        mcp10.digitalWrite(UPPER_SELECT, HIGH);
+        break;
+    }
   }
 
   if (state == TONE_EDIT || state == TONE_EDITVALUE) {
@@ -4758,10 +4819,12 @@ FLASHMEM void updateeditMode(bool announce) {
     startParameterDisplay();  // reset timeout so user can see the change
   }
 
-  updateAssignLeds();  // Repaint for the newly-active tone
-  switchLEDS = true;
-  updateButtons();
-  switchLEDS = false;
+  if (keyMode != 1 && keyMode != 2) {
+    updateAssignLeds();  // Repaint for the newly-active tone
+    switchLEDS = true;
+    updateButtons();
+    switchLEDS = false;
+  }
 }
 
 FLASHMEM void updatedco_mix_env_source(bool announce) {
@@ -5895,7 +5958,7 @@ void myNoteOn(byte channel, byte note, byte velocity) {
 
       case 0:
         {
-          if (lowerAssign == 1) {
+          if (lowerRealAssign == 1) {
             int lowerVoice = getLowerSplitVoicePoly2(note);
             int oldNote = voiceToNoteLower[lowerVoice];
             if (oldNote >= 0) {
@@ -5905,22 +5968,22 @@ void myNoteOn(byte channel, byte note, byte velocity) {
             assignVoice(note, velocity, lowerVoice);
             voiceAssignmentLower[note] = lowerVoice;
             voiceToNoteLower[lowerVoice] = note;
-          } else if (lowerAssign == 0) {
+          } else if (lowerRealAssign == 0) {
             int lowerVoice = getLowerSplitVoice(note);
             assignVoice(note, velocity, lowerVoice);
             voiceAssignmentLower[note] = lowerVoice;
             voiceToNoteLower[lowerVoice] = note;
-          } else if (lowerAssign == 2) {
+          } else if (lowerRealAssign == 2) {
             commandMonoNoteOnLower(note, velocity);
-          } else if (lowerAssign == 3) {
+          } else if (lowerRealAssign == 3) {
             commandUnisonNoteOnLower(note, velocity);
-          } else if (lowerAssign == 4) {
+          } else if (lowerRealAssign == 4) {
             assignUnisonPairLower(note, velocity, false);
-          } else if (lowerAssign == 5) {
+          } else if (lowerRealAssign == 5) {
             assignUnisonPairLower(note, velocity, true);
           }
 
-          if (upperAssign == 1) {
+          if (upperRealAssign == 1) {
             int upperVoice = getUpperSplitVoicePoly2(note);
             int oldNote = voiceToNoteUpper[upperVoice - 6];
             if (oldNote >= 0) {
@@ -5930,25 +5993,25 @@ void myNoteOn(byte channel, byte note, byte velocity) {
             assignVoice(note, velocity, upperVoice);
             voiceAssignmentUpper[note] = upperVoice;
             voiceToNoteUpper[upperVoice - 6] = note;
-          } else if (upperAssign == 0) {
+          } else if (upperRealAssign == 0) {
             int upperVoice = getUpperSplitVoice(note);
             assignVoice(note, velocity, upperVoice);
             voiceAssignmentUpper[note] = upperVoice;
             voiceToNoteUpper[upperVoice - 6] = note;
-          } else if (upperAssign == 2) {
+          } else if (upperRealAssign == 2) {
             commandMonoNoteOnUpper(note, velocity);
-          } else if (upperAssign == 3) {
+          } else if (upperRealAssign == 3) {
             commandUnisonNoteOnUpper(note, velocity);
-          } else if (upperAssign == 4) {
+          } else if (upperRealAssign == 4) {
             assignUnisonPairUpper(note, velocity, false);
-          } else if (upperAssign == 5) {
+          } else if (upperRealAssign == 5) {
             assignUnisonPairUpper(note, velocity, true);
           }
         }
         break;
 
       case 1:
-        switch (lowerAssign) {
+        switch (lowerRealAssign) {
           case 0:
             voiceNum = getVoiceNo(-1) - 1;
             assignVoice(note, velocity, voiceNum);
@@ -5966,7 +6029,7 @@ void myNoteOn(byte channel, byte note, byte velocity) {
         break;
 
       case 2:
-        switch (upperAssign) {
+        switch (upperRealAssign) {
           case 0:
             voiceNum = getVoiceNo(-1) - 1;
             assignVoice(note, velocity, voiceNum);
@@ -5985,7 +6048,7 @@ void myNoteOn(byte channel, byte note, byte velocity) {
 
       case 3:
         if (inLowerZone) {
-          switch (lowerAssign) {
+          switch (lowerRealAssign) {
             case 0:
               voiceNum = getLowerSplitVoice(note);
               assignVoice(note, velocity, voiceNum);
@@ -6005,7 +6068,7 @@ void myNoteOn(byte channel, byte note, byte velocity) {
           }
         }
         if (inUpperZone) {
-          switch (upperAssign) {
+          switch (upperRealAssign) {
             case 0:
               voiceNum = getUpperSplitVoice(note);
               assignVoice(note, velocity, voiceNum);
@@ -6028,7 +6091,7 @@ void myNoteOn(byte channel, byte note, byte velocity) {
 
       case 4:
         if (velocity < upperSplitPoint) {
-          switch (upperAssign) {
+          switch (upperRealAssign) {
             case 0:
               voiceNum = getLowerSplitVoice(note);
               assignVoice(note, velocity, voiceNum);
@@ -6047,7 +6110,7 @@ void myNoteOn(byte channel, byte note, byte velocity) {
             case 5: assignUnisonPairLower(note, velocity, true); break;
           }
         } else {
-          switch (upperAssign) {
+          switch (upperRealAssign) {
             case 0:
               voiceNum = getUpperSplitVoice(note);
               assignVoice(note, velocity, voiceNum);
@@ -6074,7 +6137,7 @@ void myNoteOn(byte channel, byte note, byte velocity) {
           byte lowerVel = xfadeLowerVel(velocity);
           byte upperVel = xfadeUpperVel(velocity);
           if (lowerVel > 0) {
-            switch (upperAssign) {
+            switch (upperRealAssign) {
               case 0:
                 {
                   int v = getLowerSplitVoice(note);
@@ -6103,7 +6166,7 @@ void myNoteOn(byte channel, byte note, byte velocity) {
             }
           }
           if (upperVel > 0) {
-            switch (upperAssign) {
+            switch (upperRealAssign) {
               case 0:
                 {
                   int v = getUpperSplitVoice(note);
@@ -6219,9 +6282,9 @@ void myNoteOff(byte channel, byte note, byte velocity) {
   switch (keyMode) {
     case 0:
       {
-        if (lowerAssign == 2) commandMonoNoteOffLower(note);
-        else if (lowerAssign == 3) commandUnisonNoteOffLower(note);
-        else if (lowerAssign == 4 || lowerAssign == 5) releaseUnisonPairLower(note);
+        if (lowerRealAssign == 2) commandMonoNoteOffLower(note);
+        else if (lowerRealAssign == 3) commandUnisonNoteOffLower(note);
+        else if (lowerRealAssign == 4 || lowerRealAssign == 5) releaseUnisonPairLower(note);
         else {
           int lowerVoice = voiceAssignmentLower[note];
           if (lowerVoice >= 0 && lowerVoice <= 5 && voiceToNoteLower[lowerVoice] == note) {
@@ -6230,9 +6293,9 @@ void myNoteOff(byte channel, byte note, byte velocity) {
             voiceToNoteLower[lowerVoice] = -1;
           }
         }
-        if (upperAssign == 2) commandMonoNoteOffUpper(note);
-        else if (upperAssign == 3) commandUnisonNoteOffUpper(note);
-        else if (upperAssign == 4 || upperAssign == 5) releaseUnisonPairUpper(note);
+        if (upperRealAssign == 2) commandMonoNoteOffUpper(note);
+        else if (upperRealAssign == 3) commandUnisonNoteOffUpper(note);
+        else if (upperRealAssign == 4 || upperRealAssign == 5) releaseUnisonPairUpper(note);
         else {
           int upperVoice = voiceAssignmentUpper[note];
           if (upperVoice >= 6 && upperVoice <= 11 && voiceToNoteUpper[upperVoice - 6] == note) {
@@ -6245,7 +6308,7 @@ void myNoteOff(byte channel, byte note, byte velocity) {
       break;
 
     case 1:
-      switch (lowerAssign) {
+      switch (lowerRealAssign) {
         case 0:
           assignedVoice = getVoiceNo(note) - 1;
           releaseVoice(note, assignedVoice);
@@ -6262,7 +6325,7 @@ void myNoteOff(byte channel, byte note, byte velocity) {
       break;
 
     case 2:
-      switch (upperAssign) {
+      switch (upperRealAssign) {
         case 0:
           assignedVoice = getVoiceNo(note) - 1;
           releaseVoice(note, assignedVoice);
@@ -6281,9 +6344,9 @@ void myNoteOff(byte channel, byte note, byte velocity) {
     case 3:
       {
         if (inLowerZone) {
-          if (lowerAssign == 2) commandMonoNoteOffLower(note);
-          else if (lowerAssign == 3) commandUnisonNoteOffLower(note);
-          else if (lowerAssign == 4 || lowerAssign == 5) releaseUnisonPairLower(note);
+          if (lowerRealAssign == 2) commandMonoNoteOffLower(note);
+          else if (lowerRealAssign == 3) commandUnisonNoteOffLower(note);
+          else if (lowerRealAssign == 4 || lowerRealAssign == 5) releaseUnisonPairLower(note);
           else {
             int lowerVoice = voiceAssignmentLower[note];
             if (lowerVoice >= 0 && lowerVoice <= 5 && voiceToNoteLower[lowerVoice] == note) {
@@ -6294,9 +6357,9 @@ void myNoteOff(byte channel, byte note, byte velocity) {
           }
         }
         if (inUpperZone) {
-          if (upperAssign == 2) commandMonoNoteOffUpper(note);
-          else if (upperAssign == 3) commandUnisonNoteOffUpper(note);
-          else if (upperAssign == 4 || upperAssign == 5) releaseUnisonPairUpper(note);
+          if (upperRealAssign == 2) commandMonoNoteOffUpper(note);
+          else if (upperRealAssign == 3) commandUnisonNoteOffUpper(note);
+          else if (upperRealAssign == 4 || upperRealAssign == 5) releaseUnisonPairUpper(note);
           else {
             int upperVoice = voiceAssignmentUpper[note];
             if (upperVoice >= 6 && upperVoice <= 11 && voiceToNoteUpper[upperVoice - 6] == note) {
@@ -6310,7 +6373,7 @@ void myNoteOff(byte channel, byte note, byte velocity) {
       break;
 
     case 4:
-      switch (upperAssign) {
+      switch (upperRealAssign) {
         case 2:
           commandMonoNoteOffLower(note);
           commandMonoNoteOffUpper(note);
@@ -6345,7 +6408,7 @@ void myNoteOff(byte channel, byte note, byte velocity) {
 
     case 5:
       {
-        switch (upperAssign) {
+        switch (upperRealAssign) {
           case 2: commandMonoNoteOffLower(note); break;
           case 3: commandUnisonNoteOffLower(note); break;
           case 4:
@@ -6361,7 +6424,7 @@ void myNoteOff(byte channel, byte note, byte velocity) {
             }
             break;
         }
-        switch (upperAssign) {
+        switch (upperRealAssign) {
           case 2: commandMonoNoteOffUpper(note); break;
           case 3: commandUnisonNoteOffUpper(note); break;
           case 4:
@@ -6462,6 +6525,7 @@ void recallPatch(int bank, int group, int slot) {
   currentGroup = group;
   currentSlot = slot;
   showPatchPage(getPatchLabel(group, slot), patchName);
+  updateAssignLeds();
 }
 
 // Recall using current position
@@ -7241,6 +7305,18 @@ void updatePerformanceData() {
   updatechasePlay(0);
 
   LAST_PARAM = 0x00;
+}
+
+void updateUpperPatchData() {
+
+  lowerSavedAssign = lowerRealAssign;
+  lowerRealAssign = upperRealAssign;
+}
+
+void updateLowerPatchData() {
+
+  upperSavedAssign = upperRealAssign;
+  upperRealAssign = lowerRealAssign;
 }
 
 void showSettingsPage() {
@@ -8818,6 +8894,12 @@ void mainButtonChanged(Button *btn, bool released) {
 
     case LOWER_BUTTON:
       if (!released) {
+        if (state == PATCHNAMING) {
+          if (patchNameCursor > 0) patchNameCursor--;
+          renderPatchNaming();
+          updateScreen();
+          break;
+        }
         editMode = 0;
         upperSW = false;
         myControlChange(midiChannel, CCeditMode, editMode);
@@ -8826,6 +8908,12 @@ void mainButtonChanged(Button *btn, bool released) {
 
     case UPPER_BUTTON:
       if (!released) {
+        if (state == PATCHNAMING) {
+          if (patchNameCursor < 17) patchNameCursor++;
+          renderPatchNaming();
+          updateScreen();
+          break;
+        }
         editMode = 1;
         upperSW = true;
         myControlChange(midiChannel, CCeditMode, editMode);

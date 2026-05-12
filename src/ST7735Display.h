@@ -136,11 +136,11 @@ void renderCurrentPatchPage() {
       break;
 
     case 1:
-      lcd.print("WH-L");
+      lcd.print("WH-U");
       break;
 
     case 2:
-      lcd.print("WH-U");
+      lcd.print("WH-L");
       break;
 
     case 3:

@@ -121,7 +121,7 @@ static inline void chaseFireUpperOn(uint8_t note, uint8_t vel) {
     voiceToNoteUpper[prev - 6] = -1;
   }
 
-  switch (upperAssign) {
+  switch (upperRealAssign) {
     case 0: {
       int v = getUpperSplitVoice(note);
       assignVoice(note, vel, v);
@@ -153,7 +153,7 @@ static inline void chaseFireLowerOn(uint8_t note, uint8_t vel) {
   }
 
   int trackedVoice = -1;
-  switch (lowerAssign) {
+  switch (lowerRealAssign) {
     case 0: {
       int v = getLowerSplitVoice(note);
       assignVoice(note, vel, v);
@@ -182,9 +182,9 @@ static inline void chaseFireLowerOn(uint8_t note, uint8_t vel) {
 }
 
 static inline void chaseFireUpperOff(uint8_t note) {
-  if (upperAssign == 2) { commandMonoNoteOffUpper(note); return; }
-  if (upperAssign == 3) { commandUnisonNoteOffUpper(note); return; }
-  if (upperAssign == 4 || upperAssign == 5) { releaseUnisonPairUpper(note); return; }
+  if (upperRealAssign == 2) { commandMonoNoteOffUpper(note); return; }
+  if (upperRealAssign == 3) { commandUnisonNoteOffUpper(note); return; }
+  if (upperRealAssign == 4 || upperRealAssign == 5) { releaseUnisonPairUpper(note); return; }
   int v = voiceAssignmentUpper[note];
   if (v >= 6 && v <= 11 && voiceToNoteUpper[v - 6] == note) {
     releaseVoice(note, v);
@@ -194,9 +194,9 @@ static inline void chaseFireUpperOff(uint8_t note) {
 }
 
 static inline void chaseFireLowerOff(uint8_t note) {
-  if (lowerAssign == 2) { commandMonoNoteOffLower(note); return; }
-  if (lowerAssign == 3) { commandUnisonNoteOffLower(note); return; }
-  if (lowerAssign == 4 || lowerAssign == 5) { releaseUnisonPairLower(note); return; }
+  if (lowerRealAssign == 2) { commandMonoNoteOffLower(note); return; }
+  if (lowerRealAssign == 3) { commandUnisonNoteOffLower(note); return; }
+  if (lowerRealAssign == 4 || lowerRealAssign == 5) { releaseUnisonPairLower(note); return; }
   int v = voiceAssignmentLower[note];
   if (v >= 0 && v <= 5 && voiceToNoteLower[v] == note) {
     releaseVoice(note, v);
