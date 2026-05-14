@@ -50,8 +50,8 @@ ADC *adc = new ADC();
 #define MUX1_DCO1_TUNE 11
 #define MUX1_PORTAMENTO 12
 #define MUX1_LFO1_WAVE 13
-#define MUX1_SPARE_14 14
-#define MUX1_SPARE_15 15
+#define MUX1_C1 14
+#define MUX1_C2 15
 
 //Mux 2 Connections
 #define MUX2_BEND_RANGE 0
