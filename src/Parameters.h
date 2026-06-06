@@ -2,6 +2,9 @@
 byte midiChannel = 1;  //(EEPROM)
 byte midiOutCh = 1; 
 
+int SLIDERintensity = 1;//(EEPROM)
+int oldSLIDERintensity = -1;
+
 enum AssignCat { CAT_POLY = 0, CAT_UNI = 1, CAT_MONO = 2 };
 
 static inline int assignCat(int v)     { return v & 3; }
@@ -403,6 +406,11 @@ int upperRealAssign;
 int lowerRealAssign;
 int upperSavedAssign;
 int lowerSavedAssign;
+int C1value = 0;
+int C2value = 0;
+int upperVolumeSend = 0;
+int lowerVolumeSend = 0;
+
 
 // Balance variables
 

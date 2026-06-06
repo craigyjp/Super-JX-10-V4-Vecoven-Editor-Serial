@@ -34,6 +34,7 @@
 #define EEPROM_PEDAL_ASSIGN         30
 #define EEPROM_C1_ASSIGN            31
 #define EEPROM_C2_ASSIGN            32
+#define EEPROM_SLIDER_INTENSITY     33
 
 // --- Generic helpers for switch (0-1), channel (0-16), sysex (0-3) bytes ---
 // All clamp to safe defaults if EEPROM is uninitialised.
@@ -115,6 +116,16 @@ int getMasterTune() {
 
 void storeMasterTune(byte tuning) {
   EEPROM.update(EEPROM_MASTER_TUNE, tuning);
+}
+
+int getSLIDERintensity() {
+  int si = EEPROM.read(EEPROM_SLIDER_INTENSITY);
+  if (si < 0 || si > 1) si = 1; //If EEPROM has no intesity stored
+  return si;
+}
+
+void storeSLIDERintensity(int SLIDERintensity){
+  EEPROM.update(EEPROM_SLIDER_INTENSITY, SLIDERintensity);
 }
 
 int getMIDIChannel() {

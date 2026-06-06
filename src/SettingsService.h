@@ -1,6 +1,6 @@
 #pragma once
 
-#define SETTINGSOPTIONSNO 5  // bump as you add more options
+#define SETTINGSOPTIONSNO 6  // bump as you add more options
 
 namespace settings {
 

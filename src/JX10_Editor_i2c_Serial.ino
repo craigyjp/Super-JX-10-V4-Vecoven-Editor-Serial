@@ -18,6 +18,7 @@
 #include "ChasePlay.h"
 #include "imxrt.h"
 #include <map>
+#include <LedControl.h>
 
 
 std::map<int, int> voiceAssignment;
@@ -91,6 +92,8 @@ void VOICE2_RESET_ISR() {
   voice2ResetTriggered = true;
 }
 
+LedControl ledpanel = LedControl(23, 22, 21, 1);
+
 void setup() {
   Serial.begin(115200);
   Serial3.begin(31250, SERIAL_8N1);
@@ -104,6 +107,16 @@ void setup() {
   setUpTone();
   setUpMIDI();
   setupHardware();
+
+  SLIDERintensity = getSLIDERintensity();
+  oldSLIDERintensity = -1;
+
+  ledpanel.shutdown(0, false);
+  /* Set the brightness to a medium values */
+  ledpanel.setIntensity(0, 15);
+  /* and clear the display */
+  ledpanel.clearDisplay(0);
+
   primeMuxBaseline();
 
   // Attach interrupts - trigger on FALLING edge (HIGH -> LOW)
@@ -260,6 +273,22 @@ void sendInitSequence() {
   EXTRA_OFFSET = 0xFF;
 }
 
+void single() {
+  if (oldSLIDERintensity != SLIDERintensity) {
+    for (int row = 0; row < 8; row++) {
+      for (int col = 0; col < 8; col++) {
+        //ledpanel.setIntensity(0, 1);
+        if (SLIDERintensity == 1) {
+          ledpanel.setLed(0, row, col, true);
+        } else {
+          ledpanel.setLed(0, row, col, false);
+        }
+      }
+    }
+  }
+  oldSLIDERintensity = SLIDERintensity;
+}
+
 // ---------------------------------------------------------------------------
 // SD Initialisation - JX-10 style
 // Creates /bank0 .. /bank7 folders and populates files 11-88 if missing
@@ -380,7 +409,7 @@ void sendTuneCommands(uint8_t masterTune) {
   upperMT1 = masterTune;
   upperMT2 = masterTune;
 
-  if (keyMode == 0 || keyMode == 4 || keyMode == 4) {
+  if (keyMode == 0 || keyMode == 4 || keyMode == 5) {
     uint8_t lowerSend = calcLowerDetune(masterTune, dualdetune);
     send5(kBoardLowerPrefix, 0xB4, lowerSend, 0xBE, lowerSend);
   } else {
@@ -474,7 +503,7 @@ void sendVoiceParam(uint8_t prefix, uint8_t offset, uint8_t param, uint8_t value
       //Serial.print("FD");
       //Serial.print(" ");
       Serial3.write(offset);
-      if (offset < 0x10) Serial.print("0");
+      //if (offset < 0x10) Serial.print("0");
       //Serial.print(offset, HEX);
       //Serial.print(" ");
       EXTRA_OFFSET = offset;
@@ -641,27 +670,27 @@ void sendModToBoards(uint8_t wheelValue) {
 
   sendVoiceParam(kBoardUpperPrefix, NO_OFFSET, 0xBC, upperMod);
   sendVoiceParam(kBoardLowerPrefix, NO_OFFSET, 0xBC, lowerMod);
-  ;
+
 }
 
 void myControlConvert(byte channel, byte control, byte value) {
   switch (control) {
 
-    case 1:  // mod wheel
+    case 1:    // mod wheel
       sendModToBoards(value);
       break;
 
-    case 2:
-      MIDI.sendControlChange(control, value, controlChannel);
+    case 7:    // Volume
+      //MIDI.sendControlChange(control, value, controlChannel);
       break;
 
-    case 7:
-      MIDI.sendControlChange(control, value, controlChannel);
+    case 64:   // Pedal A
+      //MIDI.sendControlChange(control, value, controlChannel);
       break;
 
-    case 64:
-      MIDI.sendControlChange(control, value, controlChannel);
-      break;
+    case 117:  // Pedal B
+      //MIDI.sendControlChange(control, value, controlChannel);
+      break;      
 
     default:
       int newvalue = value;
@@ -692,6 +721,16 @@ void myControlChange(byte channel, byte control, int value) {
       bend_range = value;
       bend_range_str = value;
       updatebend_range(1);
+      break;
+
+    case CCC1:
+      C1value = value;
+      updateC1();
+      break;
+
+    case CCC2:
+      C2value = value;
+      updateC2();
       break;
 
     case CClfo1_wave:
@@ -2199,6 +2238,66 @@ FLASHMEM void updatelowermod_lfo(bool announce) {
   sendModToBoards(lowerLFOModDepth);
 }
 
+FLASHMEM void updateC1() {
+  switch (c1Assign) {
+    case 0:  // 11 U/L BALANCE
+      balance = C1value;
+      //balance_str = C1value;
+      updatebalance(0);
+      break;
+    case 1:  // 15 PORTAMENTO TIME
+      portamento = C1value;
+      //portamento_str = C1value;
+      updateportamento(0);
+      break;
+    case 2:  // 18 TOTAL VOLUME
+      volume = C1value;
+      //volume_str = C1value;
+      updatevolume(0);
+      break;
+    case 3:  // 65 UP VOLUME SEND
+      upperVolumeSend = C1value;
+      //upperVolumeSend_str = C1value;
+      updatevolumeupper(0);
+      break;
+    case 4:  // 66 LO VOLUME SEND
+      lowerVolumeSend = C1value;
+      //lowerVolumeSend_str = C1value;
+      updatevolumelower(0);
+      break;
+  }
+}
+
+FLASHMEM void updateC2() {
+  switch (c2Assign) {
+    case 0:  // 11 U/L BALANCE
+      balance = C2value;
+      //balance_str = C2value;
+      updatebalance(0);
+      break;
+    case 1:  // 15 PORTAMENTO TIME
+      portamento = C2value;
+      //portamento_str = C2value;
+      updateportamento(0);
+      break;
+    case 2:  // 18 TOTAL VOLUME
+      volume = C2value;
+      //volume_str = C2value;
+      updatevolume(0);
+      break;
+    case 3:  // 65 UP VOLUME SEND
+      upperVolumeSend = C2value;
+      //upperVolumeSend_str = C2value;
+      updatevolumeupper(0);
+      break;
+    case 4:  // 66 LO VOLUME SEND
+      lowerVolumeSend = C2value;
+      //lowerVolumeSend_str = C2value;
+      updatevolumelower(0);
+      break;
+  }
+}
+
 FLASHMEM void updatebend_range(bool announce) {
 
   const uint8_t newStep = static_cast<uint8_t>(map(bend_range, 0, 127, 0, 4));
@@ -3090,6 +3189,34 @@ FLASHMEM void updatevolume(bool announce) {
 
   sendVoiceParam(kBoardBothPrefix, NO_OFFSET, 0xB1, volume);
   sendCustomSysEx((controlChannel - 1), 0x19, volume);
+}
+
+FLASHMEM void updatevolumeupper(bool announce) {
+
+  lastStepParam = 0xFF;
+  volume_str = map(volume_str, 0, 127, 0, 99);
+  if (announce && !suppressParamAnnounce) {
+    displayMode = 1;
+    showCurrentParameterPage("65 UP VOLUME SEND", String(volume_str));
+    startParameterDisplay();
+  }
+
+  sendVoiceParam(kBoardUpperPrefix, NO_OFFSET, 0xB1, volume);
+  //sendCustomSysEx((controlChannel - 1), 0x19, volume);
+}
+
+FLASHMEM void updatevolumelower(bool announce) {
+
+  lastStepParam = 0xFF;
+  volume_str = map(volume_str, 0, 127, 0, 99);
+  if (announce && !suppressParamAnnounce) {
+    displayMode = 1;
+    showCurrentParameterPage("66 LO VOLUME SEND", String(volume_str));
+    startParameterDisplay();
+  }
+
+  sendVoiceParam(kBoardLowerPrefix, NO_OFFSET, 0xB1, volume);
+  //sendCustomSysEx((controlChannel - 1), 0x19, volume);
 }
 
 FLASHMEM void updatetime1(bool announce) {
@@ -4806,7 +4933,7 @@ FLASHMEM void updateeditMode(bool announce) {
     // }
     //startParameterDisplay();
   }
-  Serial.println(keyMode);
+
   if (keyMode != 1 && keyMode != 2) {
     switch (editMode) {
       case 0:
@@ -7798,7 +7925,7 @@ void checkEncoder() {
       case PEDAL_EDIT:
         pedalAssignWorking = (pedalAssignWorking + 1) % PEDAL_ASSIGN_COUNT;
         showPedalEditPage("PEDAL SW ASSIGN",
-                             pedalAssignLabels[pedalAssignWorking]);
+                          pedalAssignLabels[pedalAssignWorking]);
         updateScreen();
         break;
 
@@ -7927,7 +8054,7 @@ void checkEncoder() {
                                ? (PEDAL_ASSIGN_COUNT - 1)
                                : (pedalAssignWorking - 1);
         showPedalEditPage("PEDAL SW ASSIGN",
-                             pedalAssignLabels[pedalAssignWorking]);
+                          pedalAssignLabels[pedalAssignWorking]);
         updateScreen();
         break;
 
@@ -8051,7 +8178,7 @@ void mainButtonChanged(Button *btn, bool released) {
           pedalAssignWorking = pedalAssign;  // start preview from stored
           state = PEDAL_EDIT;
           showPedalEditPage("PEDAL SW ASSIGN",
-                               pedalAssignLabels[pedalAssignWorking]);
+                            pedalAssignLabels[pedalAssignWorking]);
         }
         updateScreen();
       }
@@ -9290,6 +9417,12 @@ void checkMux() {
       case MUX1_LFO1_WAVE:
         myControlChange(midiChannel, CClfo1_wave, mux1Read);
         break;
+      case MUX1_C1:
+        myControlChange(midiChannel, CCC1, mux1Read);
+        break;
+      case MUX1_C2:
+        myControlChange(midiChannel, CCC2, mux1Read);
+        break;
     }
     suppressParamAnnounce = prevSuppress;
   }
@@ -9551,6 +9684,7 @@ void loop() {
   MIDI.read(midiChannel);
 
   if (!receivingSysEx) {
+    single();
     checkMux();
     checkEncoder();
     checkSwitches();

@@ -34,12 +34,14 @@ void settingsMIDICh(int index, const char *value);
 void settingsMIDIOutCh(int index, const char *value);
 void settingsEncoderDir(int index, const char *value);
 void settingsUpdateParams(int index, const char *value);
+void settingsSLIDERintensity(int index, const char *value);
 
 int currentIndexMasterTune();
 int currentIndexMIDICh();
 int currentIndexMIDIOutCh();
 int currentIndexEncoderDir();
 int currentIndexUpdateParams();
+int currentIndexSLIDERintensity();
 
 // ─────────────────────────────────────────────
 // Handlers
@@ -49,6 +51,15 @@ void settingsMasterTune(int index, const char *value) {
   storeMasterTune(masterTune);
 
   sendTuneCommands(masterTune);
+}
+
+void settingsSLIDERintensity(int index, const char *value) {
+  if (strcmp(value, "Off") == 0) {
+    SLIDERintensity = 0;
+  } else {
+    SLIDERintensity = 1;
+  }
+  storeSLIDERintensity(SLIDERintensity);
 }
 
 void settingsMIDICh(int index, const char *value) {
@@ -94,6 +105,10 @@ int currentIndexMasterTune() {
   return (int)getMasterTune();           // 0x2C → 44, direct 1:1
 }
 
+int currentIndexSLIDERintensity() {
+  return getSLIDERintensity();
+}
+
 int currentIndexMIDICh() {
   return getMIDIChannel();
 }
@@ -117,6 +132,7 @@ static const char* midiChValues[]     = { "All", "1", "2", "3", "4", "5", "6", "
 static const char* midiOutChValues[]  = { "Off", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "\0" };
 static const char* encoderValues[]    = { "Type 1", "Type 2", "\0" };
 static const char* midiParamValues[]  = { "Off", "Send Params", "\0" };
+static const char* sliderLedValues[]  = { "Off", "On", "\0" };
 
 void setUpSettings() {
   buildMasterTuneLabels();
@@ -126,4 +142,5 @@ void setUpSettings() {
   settings::append({ "MIDI Out Ch.", midiOutChValues,   17, settingsMIDIOutCh,   currentIndexMIDIOutCh });
   settings::append({ "Encoder",      encoderValues,      2, settingsEncoderDir,  currentIndexEncoderDir });
   settings::append({ "MIDI Params",  midiParamValues,    2, settingsUpdateParams,currentIndexUpdateParams });
+  settings::append({ "Slider LEDs",  sliderLedValues,    2, settingsSLIDERintensity, currentIndexSLIDERintensity});
 }

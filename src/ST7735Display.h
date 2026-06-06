@@ -543,7 +543,7 @@ void renderSettingsPage() {
   // Up/down indicators for SETTINGS navigation (right side of line 1)
   lcd.setCursor(38, 0);
   if (currentSettingsPart == SETTINGS) {
-    lcd.write(byte(1));  // Up triangle
+    lcd.write(byte(0x3C));  // Up triangle
   } else {
     lcd.print("  ");
   }
@@ -561,7 +561,7 @@ void renderSettingsPage() {
   // Up/down indicators for SETTINGSVALUE navigation (right side of line 2)
   lcd.setCursor(38, 1);
   if (currentSettingsPart == SETTINGSVALUE) {
-    lcd.write(byte(2));  // Down triangle
+    lcd.write(byte(0x3C));  // Down triangle
   } else {
     lcd.print("  ");
   }
